@@ -82,27 +82,22 @@ def search(log: nu.Nu, text: str) -> nu.Nu:
 
 
 def tail(log: nu.Nu, n: int) -> nu.Nu:
-    """Collect every entry id (the reader sorts newest-first and keeps the last ``n``).
+    """The newest ``n`` entry ids, newest-first -- order and limit pushed into Nu.
 
-    Tail is a read-layer concern: the slice on ``n`` happens after the reader has
-    decoded and sorted on ``ts``, so this builder just hands over the full keyset.
-    ``n`` rides along as metadata for the reader (see :class:`~nulog.logger.Logger`).
+    Entry ids are fixed-width zero-padded, so lexicographic-descending equals
+    chronological-descending: ``Sorted(<ids>, reverse=True)`` puts the most recent
+    first, and ``Take(..., n)`` keeps only the newest ``n``. So only ``n`` ids come
+    back from the store, already ordered -- the reader decodes them as-is, no
+    Python-side sort or slice on the tail path.
     """
-    del n  # the cut happens in the reader, after sorting on ts
-    return all_ids(log)
+    return nu.Take(nu.Sorted(all_ids(log), reverse=True), n)
 
 
-def count_by_level(log: nu.Nu) -> dict[str, nu.Nu]:
-    """A per-level Query map: ``{level: Query yielding the count of that level}``.
+def count_by_level(log: nu.Nu) -> nu.Nu:
+    """One Query grouping entry ids by their ``level`` slot: ``{level: [ids]}``.
 
-    Each value counts the matching entries with ``Len(Collect(Filter(...)))``. The
-    caller runs each under a Snapshot and reads an int back.
+    A single ``GroupBy`` over the keyset -- one Snapshot, one pass. The caller runs
+    it once and turns the per-level lists into counts, backfilling the levels that
+    never appear (see :meth:`~nulog.logger.Logger.count_by_level`).
     """
-    return {
-        level: nu.Len(
-            nu.Collect(
-                nu.Filter(_ids(log), condition=(nu.StrForm(_entry(log).level) == level)),
-            ),
-        )
-        for level in LEVELS
-    }
+    return nu.GroupBy(_ids(log), key=nu.StrForm(_entry(log).level), item="item")

@@ -26,6 +26,9 @@ from .shapes import Streams
 
 __all__ = ["LogRecord", "read_records"]
 
+# The slot index the batch read binds each iteration to (0..3 -> ts/level/msg/fields).
+_SLOT = nu.IntAttrRef("slot")
+
 
 @dataclass(frozen=True, slots=True)
 class LogRecord:
@@ -47,18 +50,9 @@ class LogRecord:
     fields: dict[str, object] = field(default_factory=dict)
 
 
-def _read_str(ctx: nu.Context, ref: nu.Nu, default: str = "") -> str:
-    """Read a StrRef into a Python string, defaulting when the slot is missing."""
-    expr = nu.If(ref.missing(), nu.Literal(default), nu.StrForm(ref))
-    val = runtime.collect(nv.Snapshot(expr), ctx)[0]
-    return val if isinstance(val, str) else default
-
-
-def _read_int(ctx: nu.Context, ref: nu.Nu, default: int = 0) -> int:
-    """Read an IntRef into a Python int, defaulting when the slot is missing."""
-    expr = nu.If(ref.missing(), nu.Literal(default), nu.IntForm(ref))
-    val = runtime.collect(nv.Snapshot(expr), ctx)[0]
-    return val if isinstance(val, int) else default
+def _guarded(ref: nu.Nu, default: object, form: type) -> nu.Nu:
+    """A slot read with a missing-slot fallback: ``If(missing, default, Form(ref))``."""
+    return nu.If(ref.missing(), nu.Literal(default), form(ref))
 
 
 def _decode_fields(raw: str) -> dict[str, object]:
@@ -73,24 +67,42 @@ def _decode_fields(raw: str) -> dict[str, object]:
 
 
 def read_entry(ctx: nu.Context, stream: str, entry_id: str) -> LogRecord:
-    """Read one entry record into a :class:`LogRecord`."""
+    """Read one entry record into a :class:`LogRecord`.
+
+    All four slots (``ts``, ``level``, ``msg``, ``fields``) are read in ONE
+    ``nv.Snapshot`` generation: a ``Map`` over the slot index yields the four
+    guarded values in order, so it's ~1 round-trip per entry, not 4.
+    """
     entry = Streams.logs[stream].entries[entry_id]
+    slots = [
+        _guarded(entry.ts, 0, nu.IntForm),
+        _guarded(entry.level, "", nu.StrForm),
+        _guarded(entry.msg, "", nu.StrForm),
+        _guarded(entry.fields, "", nu.StrForm),
+    ]
+    pick = nu.Switch(_SLOT, dict(enumerate(slots)))
+    batch = nu.Map(nu.Iter(nu.Literal(list(range(len(slots))))), transform=pick, item="slot")
+    ts, level, msg, fields = runtime.collect(nv.Snapshot(batch), ctx)
     return LogRecord(
         id=entry_id,
-        ts=_read_int(ctx, entry.ts),
-        level=_read_str(ctx, entry.level),
-        msg=_read_str(ctx, entry.msg),
-        fields=_decode_fields(_read_str(ctx, entry.fields)),
+        ts=ts if isinstance(ts, int) else 0,
+        level=level if isinstance(level, str) else "",
+        msg=msg if isinstance(msg, str) else "",
+        fields=_decode_fields(fields if isinstance(fields, str) else ""),
     )
 
 
-def read_records(ctx: nu.Context, stream: str, id_query: nu.Nu) -> list[LogRecord]:
+def read_records(
+    ctx: nu.Context, stream: str, id_query: nu.Nu, *, presorted: bool = False
+) -> list[LogRecord]:
     """Run an entry-id query and decode the hits into records, newest-first.
 
     Args:
         ctx: the bound Context (its Navigator carries the store).
         stream: the stream name the ids belong to.
         id_query: a Nu Query yielding entry ids (from :mod:`nulog.query`).
+        presorted: when True the query already yields ids newest-first (the
+            ``tail`` path sorts and limits in Nu), so skip the Python-side sort.
 
     Returns:
         The matching entries as :class:`LogRecord`s, sorted by ``ts`` descending
@@ -98,7 +110,8 @@ def read_records(ctx: nu.Context, stream: str, id_query: nu.Nu) -> list[LogRecor
     """
     ids = runtime.collect(nv.Snapshot(id_query), ctx)[0]
     records = [read_entry(ctx, stream, eid) for eid in _as_ids(ids)]
-    records.sort(key=lambda r: (r.ts, r.id), reverse=True)
+    if not presorted:
+        records.sort(key=lambda r: (r.ts, r.id), reverse=True)
     return records
 
 

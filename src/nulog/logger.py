@@ -162,7 +162,7 @@ class Logger:
 
     def tail(self, n: int = 20) -> list[LogRecord]:
         """The most recent ``n`` lines, newest-first."""
-        return read_records(self._ctx, self.stream, query.tail(self._log, n))[:n]
+        return read_records(self._ctx, self.stream, query.tail(self._log, n), presorted=True)
 
     def by_level(self, level: str) -> list[LogRecord]:
         """Every line at ``level``, newest-first."""
@@ -186,8 +186,6 @@ class Logger:
 
     def count_by_level(self) -> dict[str, int]:
         """A ``{level: count}`` tally over the whole stream."""
-        counts = query.count_by_level(self._log)
-        return {
-            level: runtime.collect(nv.Snapshot(count_q), self._ctx)[0]
-            for level, count_q in counts.items()
-        }
+        groups = runtime.collect(nv.Snapshot(query.count_by_level(self._log)), self._ctx)[0]
+        groups = groups if isinstance(groups, dict) else {}
+        return {level: len(groups.get(level, ())) for level in query.LEVELS}
