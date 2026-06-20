@@ -6,9 +6,8 @@
 Context is the one nudle binds a session onto, so the same store that holds the
 logs feeds the page.
 
-``nudle run`` consumes a module exposing ``app`` and ``context``; this helper is
-the programmatic path for the same wiring (open store, build app, serve), for
-embedding a viewer in a host process.
+This is the front door for serving a viewer from plain Python (open store, build
+app, run server), so a viewer needs no nudle CLI and embeds in a host process.
 """
 
 from __future__ import annotations

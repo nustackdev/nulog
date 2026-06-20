@@ -15,6 +15,6 @@
   box, and per-level count stats. Run it:
 
   ```sh
-  pip install -e ".[ui]"          # or: uv pip install -e ".[ui]"
-  nudle run examples/viewer.py    # then open http://127.0.0.1:8080
+  pip install -e ".[ui]"              # or: uv pip install -e ".[ui]"
+  .venv/bin/python examples/viewer.py # then open http://127.0.0.1:8080
   ```

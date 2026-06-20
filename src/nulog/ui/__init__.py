@@ -18,8 +18,9 @@ Quickstart::
     with open_logs("/var/log/myapp") as logs:
         run_viewer(["app", "scraper"], logs=logs)
 
-Or expose ``app`` + ``context`` from a module and ``nudle run`` it (see
-``examples/viewer.py``).
+``run_viewer`` runs the server itself, so a viewer is a plain Python script, no
+nudle CLI needed (see ``examples/viewer.py``). For finer control over the
+lifecycle, ``serve_logs`` is the async coroutine underneath.
 """
 
 from __future__ import annotations

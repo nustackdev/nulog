@@ -1,20 +1,21 @@
 """nulog viewer demo -- live log table in the browser, over an in-memory store.
 
-Opens an in-memory nulog store, seeds a handful of lines across two streams
-(``app`` + ``scraper``) and all four levels with structured fields, runs a
-background generator that appends a fresh line every ~1.5s (so the live tail
-visibly updates, like counter.py's ``bg`` worker), and serves the viewer.
+A plain Python script: opens an in-memory nulog store, seeds a handful of lines
+across two streams (``app`` + ``scraper``) and all four levels with structured
+fields, starts a background thread that appends a fresh line every ~1.5s (so the
+live tail visibly updates), and serves the viewer with ``run_viewer``.
+
+``run_viewer`` builds the reactive page over the store and runs the server, so
+this needs no ``nudle`` CLI -- just run the file.
 
 What you get: a newest-first entry table (time / level / message / fields), a
 stream switcher, a level filter, a message search box, and per-level count
 stats. The table and counts repaint every second.
 
 Run:
-    nudle run examples/viewer.py
-    # or, with hot reload:
-    nudle dev examples/viewer.py
+    python examples/viewer.py
 
-Then open http://127.0.0.1:8080.
+Then open http://127.0.0.1:8080. Ctrl-C to stop.
 """
 
 from __future__ import annotations
@@ -22,20 +23,23 @@ from __future__ import annotations
 import itertools
 import random
 import threading
-from contextlib import contextmanager
-from typing import TYPE_CHECKING
 
 from nulog import open_logs
-from nulog.ui import build_app
-
-
-if TYPE_CHECKING:
-    from collections.abc import Iterator
-
-    import nu
+from nulog.ui import run_viewer
 
 
 STREAMS = ["app", "scraper"]
+
+_LEVELS = ["debug", "info", "warn", "error"]
+_MESSAGES = [
+    "tick processed",
+    "user signed in",
+    "payment captured",
+    "queue drained",
+    "retry scheduled",
+    "connection reset",
+    "snapshot written",
+]
 
 
 def _seed(logs) -> None:
@@ -55,56 +59,33 @@ def _seed(logs) -> None:
     scraper.error("blocked", status=429)
 
 
-# ---- one store for the whole process ---------------------------------------
-# Opened once at import, kept open for the life of the server. nudle reads the
-# module-level `app` once (before entering context()), so `app` closes over this
-# same store -- the one context() yields the ctx of.
-
-_store_cm = open_logs()
-_LOGS = _store_cm.__enter__()
-_seed(_LOGS)
-
-
-# ---- background generator: a new line every ~1.5s --------------------------
-# A daemon thread, the way counter.py's `bg` worker bumps the counter -- but a
-# plain eager write here (the store is single-process in-memory), so the live
-# tail visibly updates while the page is open.
-
-_LEVELS = ["debug", "info", "warn", "error"]
-_MESSAGES = [
-    "tick processed",
-    "user signed in",
-    "payment captured",
-    "queue drained",
-    "retry scheduled",
-    "connection reset",
-    "snapshot written",
-]
-
-
-def _generate(stop: threading.Event) -> None:
+def _generate(logs, stop: threading.Event) -> None:
+    """Append a new line to a random stream every ~1.5s until stopped."""
     counter = itertools.count(1)
     while not stop.wait(1.5):
         n = next(counter)
         stream = random.choice(STREAMS)  # noqa: S311 -- demo jitter, not crypto
         level = random.choice(_LEVELS)  # noqa: S311
         msg = random.choice(_MESSAGES)  # noqa: S311
-        _LOGS.stream(stream).log(level, msg, seq=n, stream=stream)
+        logs.stream(stream).log(level, msg, seq=n, stream=stream)
 
 
-# The per-session UI program, over the same open store.
-app = build_app(_LOGS, STREAMS)
+def main() -> None:
+    """Open a store, seed it, run the background generator, and serve the viewer."""
+    with open_logs() as logs:
+        _seed(logs)
+        stop = threading.Event()
+        worker = threading.Thread(target=_generate, args=(logs, stop), daemon=True)
+        worker.start()
+        try:
+            run_viewer(STREAMS, logs=logs)
+        finally:
+            stop.set()
+            worker.join(timeout=2.0)
 
 
-@contextmanager
-def context() -> Iterator[nu.Context]:
-    """Yield the open store's bound Context; run the generator while serving."""
-    stop = threading.Event()
-    worker = threading.Thread(target=_generate, args=(stop,), daemon=True)
-    worker.start()
+if __name__ == "__main__":
     try:
-        yield _LOGS.ctx
-    finally:
-        stop.set()
-        worker.join(timeout=2.0)
-        _store_cm.__exit__(None, None, None)
+        main()
+    except KeyboardInterrupt:
+        pass

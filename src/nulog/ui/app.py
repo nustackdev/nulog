@@ -207,8 +207,8 @@ def build_app(logs: Logs, streams: Sequence[str]) -> nu.Nu:
     Returns:
         The Nu program: set the document title, seed ``ViewState`` + page chrome,
         then run the live-tail repaint alongside the filter react hooks (all in
-        parallel). Hand it to :func:`nulog.ui.serve.serve_logs` or expose it as
-        the module's ``app`` for ``nudle run``.
+        parallel). Hand it to :func:`nulog.ui.serve.serve_logs` (which
+        :func:`nulog.ui.serve.run_viewer` wraps).
     """
     tail = nu.ForeverDo(nv.Snapshot(_repaint(logs)) >> AsyncSleep(TICK_SECONDS))
 

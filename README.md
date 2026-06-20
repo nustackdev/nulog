@@ -56,14 +56,15 @@ the same language the writer used: the table is fed by `query.tail` /
 
 ```sh
 pip install nulog[ui]
-nudle run examples/viewer.py    # then open http://127.0.0.1:8080
+python examples/viewer.py    # then open http://127.0.0.1:8080
 ```
 
 You get one page: a live, newest-first entry table (time / level / message /
 fields), a stream switcher, a level filter, a message search box, and per-level
 count stats. The table and counts repaint every second, so new lines surface
 live. The whole UI is read-only over the logs -- mounting a viewer never mutates
-the store. To embed it in a host process instead of `nudle run`:
+the store. The viewer serves itself through `run_viewer`, no nudle CLI needed;
+to embed it in a host process:
 
 ```python
 from nulog import open_logs
