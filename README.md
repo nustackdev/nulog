@@ -47,6 +47,36 @@ nv.Transaction(Account.balance.store(new), app.entry("info", "debit", amount=n))
 
 The runnable example is `examples/basic.py`.
 
+## Viewer (`[ui]` extra)
+
+A log line is a Nu read; so is the viewer. `nulog[ui]` adds a browser viewer
+(built on [nudle](https://github.com/nustackdev/nudle)) that queries a store in
+the same language the writer used: the table is fed by `query.tail` /
+`query.by_level` / `query.search`, the counts by `count_by_level`.
+
+```sh
+pip install nulog[ui]
+nudle run examples/viewer.py    # then open http://127.0.0.1:8080
+```
+
+You get one page: a live, newest-first entry table (time / level / message /
+fields), a stream switcher, a level filter, a message search box, and per-level
+count stats. The table and counts repaint every second, so new lines surface
+live. The whole UI is read-only over the logs -- mounting a viewer never mutates
+the store. To embed it in a host process instead of `nudle run`:
+
+```python
+from nulog import open_logs
+from nulog.ui import run_viewer
+
+with open_logs("/var/log/myapp") as logs:
+    run_viewer(["app", "scraper"], logs=logs)   # blocks, serves on :8080
+```
+
+The viewer code lives in `src/nulog/ui/`; the runnable demo is
+`examples/viewer.py`. The core package never imports nudle, so plain `nulog`
+works without the extra.
+
 ## Layout
 
 - `shapes.py` - the `LogEntry`, `Log`, and `Streams` shapes (the store layout)

@@ -44,6 +44,7 @@ dependencies = [
 
 [tool.uv.sources]
 nu = { path = "../nu/src", editable = true }
+nudle = { path = "../nudle/api/dist/nudle-0.1.0-py3-none-any.whl" }
 
 [project.urls]
 Homepage = "https://github.com/nustackdev/nulog"
@@ -68,9 +69,13 @@ test = [
     "pytest-asyncio>=1.2.0",
     "hypothesis>=6.0.0",
 ]
+# Browser log viewer (the nudle UI surface in src/nulog/ui)
+ui = [
+    "nudle",
+]
 # All development dependencies
 all = [
-    "nulog[dev,test]",
+    "nulog[dev,test,ui]",
 ]
 
 # ============================================================================
