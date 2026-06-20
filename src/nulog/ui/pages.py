@@ -61,6 +61,9 @@ class ViewState(nu.Shape):
 class LogViewer(nudle.Page):
     """The one page: title, per-level counts, filters, and the entry table.
 
+    The per-level counts are whole-stream totals, independent of the active level
+    filter and search box (the table honors those filters, the counts do not).
+
     Attributes:
         heading: the page title heading.
         debug_count: the ``debug`` level count, shown as a Stat.

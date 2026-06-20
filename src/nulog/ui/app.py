@@ -143,28 +143,25 @@ def _make_build_table(logs: Logs) -> object:
     return build_table
 
 
-def _make_count_for(logs: Logs, level: str) -> object:
-    """A ``FuncCall`` target returning the count of ``level`` on the current stream."""
-
-    def count_for() -> str:
-        stream, _level, _search = _read_view(logs)
-        return str(logs.stream(stream).count_by_level().get(level, 0))
-
-    return count_for
-
-
 def _repaint(logs: Logs) -> nu.Nu:
     """One repaint pass: refresh the table and the per-level count Stats.
 
-    The table and the counts read the live ``ViewState`` filter inside their
-    FuncCalls, so a repaint always reflects the user's current selection.
+    The table reads the live ``ViewState`` filter inside its FuncCall, so a
+    repaint always reflects the user's current selection. The per-level counts
+    are whole-stream totals: ``count_by_level()`` runs once per repaint (one
+    ``GroupBy`` pass yields all four levels) and the four Stat writes take literal
+    values out of that single dict, so a tick does not re-scan the stream per
+    level. The counts intentionally ignore the level filter and search box -- the
+    table honors those, the counts show stream totals.
     """
+    stream, _level, _search = _read_view(logs)
+    by_level = logs.stream(stream).count_by_level()
     table = LogViewer.table.store(nu.FuncCall(_make_build_table(logs)))
     counts = (
-        LogViewer.debug_count.store_value(nu.FuncCall(_make_count_for(logs, "debug")))
-        | LogViewer.info_count.store_value(nu.FuncCall(_make_count_for(logs, "info")))
-        | LogViewer.warn_count.store_value(nu.FuncCall(_make_count_for(logs, "warn")))
-        | LogViewer.error_count.store_value(nu.FuncCall(_make_count_for(logs, "error")))
+        LogViewer.debug_count.store_value(str(by_level.get("debug", 0)))
+        | LogViewer.info_count.store_value(str(by_level.get("info", 0)))
+        | LogViewer.warn_count.store_value(str(by_level.get("warn", 0)))
+        | LogViewer.error_count.store_value(str(by_level.get("error", 0)))
     )
     return table | counts
 
