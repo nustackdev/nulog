@@ -19,7 +19,7 @@ from contextlib import contextmanager
 from typing import TYPE_CHECKING
 
 import nu
-from nu_virtuals.presets import rocksdb_storage_inmemory
+from nu.virtuals.presets import rocksdb_storage_inmemory
 from virtuals import Navigator
 
 from .logger import Logger

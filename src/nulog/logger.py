@@ -25,11 +25,11 @@ from __future__ import annotations
 import itertools
 import json
 import time
+from collections import Counter
 from typing import TYPE_CHECKING
 
 import nu
-import nu_virtuals as nv
-from nu import runtime
+import nu.virtuals as nv
 
 from . import query
 from .records import read_records
@@ -139,7 +139,7 @@ class Logger:
             The minted entry id of the line just written.
         """
         eid = new_entry_id(now_ms())
-        runtime.execute(nv.Transaction(self.entry(level, msg, entry_id=eid, **fields)), self._ctx)
+        nu.run(nv.Transaction(self.entry(level, msg, entry_id=eid, **fields)), self._ctx)
         return eid
 
     def debug(self, msg: str, **fields: object) -> str:
@@ -162,7 +162,7 @@ class Logger:
 
     def tail(self, n: int = 20) -> list[LogRecord]:
         """The most recent ``n`` lines, newest-first."""
-        return read_records(self._ctx, self.stream, query.tail(self._log, n), presorted=True)
+        return read_records(self._ctx, self.stream, query.tail(self._log), presorted=True, limit=n)
 
     def by_level(self, level: str) -> list[LogRecord]:
         """Every line at ``level``, newest-first."""
@@ -186,6 +186,6 @@ class Logger:
 
     def count_by_level(self) -> dict[str, int]:
         """A ``{level: count}`` tally over the whole stream."""
-        groups = runtime.collect(nv.Snapshot(query.count_by_level(self._log)), self._ctx)[0]
-        groups = groups if isinstance(groups, dict) else {}
-        return {level: len(groups.get(level, ())) for level in query.LEVELS}
+        levels = nu.run(nv.Snapshot(query.count_by_level(self._log)), self._ctx)[0]
+        tally = Counter(lvl for lvl in levels if isinstance(lvl, str)) if levels else Counter()
+        return {level: tally.get(level, 0) for level in query.LEVELS}

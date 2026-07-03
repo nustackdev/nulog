@@ -21,7 +21,7 @@ the store.
 from __future__ import annotations
 
 import nu
-import nu_virtuals as nv
+import nu.virtuals as nv
 
 
 __all__ = ["Log", "LogEntry", "Streams"]

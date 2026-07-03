@@ -3,7 +3,7 @@
 :func:`build_app` returns the Nu ``app`` flow for a viewer mounted over a
 :class:`~nulog.presets.Logs` store. The flow is the examples' shape:
 
-- a **live-tail repaint**: ``ForeverDo(Snapshot(<repaint>) >> AsyncSleep(~1s))``
+- a **live-tail repaint**: ``ForeverDo(Snapshot(<repaint>) >> Delay(~1s))``
   re-reads the current stream's entries through the core query builders every
   second and repaints the table plus the per-level count Stats, so new lines
   appear live.
@@ -17,10 +17,11 @@ The reads run through :mod:`nulog.query` (``tail`` / ``by_level`` / ``search``)
 and :meth:`~nulog.logger.Logger.count_by_level`: the viewer queries logs in the
 same language the writer used. The id -> record decode is awkward to express
 purely in the Table wire api (the Table takes a ``{columns, rows}`` payload, not
-a record stream), so the row shaping runs in a ``nu.FuncCall`` that closes over
-the ``Logs`` handle, reads ``ViewState`` and then the records through those core
-helpers, and returns the payload the Table stores. The loop stays Nu-driven and
-the reads stay under ``Snapshot``, matching the examples.
+a record stream), so the row shaping runs in a ``_BuildTable`` atom (a
+``ScalarQueryFactory`` over a Python function) that takes the ``Logs`` handle,
+reads ``ViewState`` and then the records through those core helpers, and returns
+the payload the Table stores. The loop stays Nu-driven and the reads stay under
+``Snapshot``, matching the examples.
 """
 
 from __future__ import annotations
@@ -29,10 +30,8 @@ import json
 from typing import TYPE_CHECKING
 
 import nu
-import nu_virtuals as nv
-from nu import runtime
-from nu.shapes.flows.react import ReactForever
-from nu.stdlib.asyncio import AsyncSleep
+import nu.virtuals as nv
+from nu import ReactForever, ScalarQueryFactory
 
 from .pages import DEFAULT_LEVEL, LEVEL_OPTIONS, TABLE_COLUMNS, LogIndex, LogViewer, ViewState
 
@@ -107,9 +106,12 @@ def _records(logs: Logs, stream: str, level: str, search: str) -> list[LogRecord
 
 
 def _read_slot(logs: Logs, slot: nu.Nu, default: str) -> str:
-    """Read one ``ViewState`` str slot off the store's Context, with a fallback."""
-    guarded = nu.If(slot.missing(), nu.Literal(default), nu.StrForm(slot))
-    value = runtime.collect(nv.Snapshot(guarded), logs.ctx)[0]
+    """Read one ``ViewState`` str slot off the store's Context, with a fallback.
+
+    A missing slot reads as ``EMPTY`` (not a ``str``), so it falls back to
+    ``default`` -- no explicit missing-guard needed.
+    """
+    value = nu.run(nv.Snapshot(nu.StrForm(slot)), logs.ctx)[0]
     return str(value) if isinstance(value, str) and value else default
 
 
@@ -117,9 +119,8 @@ def _read_view(logs: Logs) -> tuple[str, str, str]:
     """Read the current filter (stream, level, search) off ``ViewState``.
 
     Reads the three nv slots on the store's Context, with empty-slot fallbacks.
-    Closing over ``logs`` is what gives the repaint FuncCalls a Context to read
-    from (a ``FuncCall`` target gets resolved values, not the ctx, so the handle
-    carries it in).
+    Threading ``logs`` through is what gives the repaint atoms a Context to read
+    from (``_build_table`` gets the handle as its resolved child, not the ctx).
     """
     stream = _read_slot(logs, ViewState.stream, default_stream(()))
     level = _read_slot(logs, ViewState.level, DEFAULT_LEVEL)
@@ -127,36 +128,40 @@ def _read_view(logs: Logs) -> tuple[str, str, str]:
     return stream, level, search
 
 
-def _make_build_table(logs: Logs) -> object:
-    """A ``FuncCall`` target that shapes the table payload for the current filter.
+def _build_table(logs: Logs) -> dict[str, object]:
+    """Shape the Table wire payload (``{"columns", "rows"}``) for the current filter.
 
-    Reads ``ViewState`` then the matching records (both via the closed-over
-    ``Logs`` handle) and returns the Table wire payload (``{"columns", "rows"}``);
-    ``store`` writes it whole.
+    Reads ``ViewState`` then the matching records (both via the ``Logs`` handle)
+    and returns the payload the Table ``store`` writes whole. Called through
+    :data:`_BuildTable`, the ScalarQuery atom below.
     """
+    stream, level, search = _read_view(logs)
+    records = _records(logs, stream, level, search)
+    return {"columns": list(TABLE_COLUMNS), "rows": [_row(r) for r in records]}
 
-    def build_table() -> dict[str, object]:
-        stream, level, search = _read_view(logs)
-        records = _records(logs, stream, level, search)
-        return {"columns": list(TABLE_COLUMNS), "rows": [_row(r) for r in records]}
 
-    return build_table
+# The store-side stand-in for a value Nu cannot shape: a ScalarQuery atom that
+# runs :func:`_build_table` on its resolved child (the ``Logs`` handle, carried
+# in as a Literal). ``deterministic=False`` because the payload is a function of
+# the live store, not just the (constant) handle it takes -- like the clock-
+# reading stdlib atoms (DatetimeNow, PathCwd), it must not be constant-folded.
+_BuildTable = ScalarQueryFactory("BuildLogTable", _build_table, deterministic=False)
 
 
 def _repaint(logs: Logs) -> nu.Nu:
     """One repaint pass: refresh the table and the per-level count Stats.
 
-    The table reads the live ``ViewState`` filter inside its FuncCall, so a
-    repaint always reflects the user's current selection. The per-level counts
-    are whole-stream totals: ``count_by_level()`` runs once per repaint (one
-    ``GroupBy`` pass yields all four levels) and the four Stat writes take literal
+    The table reads the live ``ViewState`` filter inside its ``_BuildTable`` atom,
+    so a repaint always reflects the user's current selection. The per-level counts
+    are whole-stream totals: ``count_by_level()`` runs once per repaint (one pass
+    over the keyset yields every level) and the four Stat writes take literal
     values out of that single dict, so a tick does not re-scan the stream per
     level. The counts intentionally ignore the level filter and search box -- the
     table honors those, the counts show stream totals.
     """
     stream, _level, _search = _read_view(logs)
     by_level = logs.stream(stream).count_by_level()
-    table = LogViewer.table.store(nu.FuncCall(_make_build_table(logs)))
+    table = LogViewer.table.store(_BuildTable(nu.LiteralQuery(logs)))
     counts = (
         LogViewer.debug_count.store_value(str(by_level.get("debug", 0)))
         | LogViewer.info_count.store_value(str(by_level.get("info", 0)))
@@ -210,7 +215,7 @@ def build_app(logs: Logs, streams: Sequence[str]) -> nu.Nu:
         parallel). Hand it to :func:`nulog.ui.serve.serve_logs` (which
         :func:`nulog.ui.serve.run_viewer` wraps).
     """
-    tail = nu.ForeverDo(nv.Snapshot(_repaint(logs)) >> AsyncSleep(TICK_SECONDS))
+    tail = nu.ForeverDo(nv.Snapshot(_repaint(logs)) >> nu.Delay(nu.LiteralQuery(TICK_SECONDS)))
 
     # On each filter change: mirror the picked value into ViewState (one read of
     # the Ref), then repaint at once so the change shows without waiting a tick.

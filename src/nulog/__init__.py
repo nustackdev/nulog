@@ -19,7 +19,7 @@ Quickstart::
 
 Compose mode weaves a log line into a bigger atomic program::
 
-    import nu_virtuals as nv
+    import nu.virtuals as nv
 
     nv.Transaction(Account.balance.store(...), app.entry("info", "debit", amount=n))
 """

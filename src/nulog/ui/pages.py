@@ -20,7 +20,7 @@ mutates the logs.
 from __future__ import annotations
 
 import nu
-import nu_virtuals as nv
+import nu.virtuals as nv
 import nudle
 
 

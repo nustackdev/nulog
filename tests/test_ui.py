@@ -9,7 +9,7 @@ import nu
 
 from nulog import open_logs
 from nulog.ui import build_app, default_stream
-from nulog.ui.app import _make_build_table, _read_view, _seed_view
+from nulog.ui.app import _build_table, _read_view, _seed_view
 from nulog.ui.pages import LEVEL_OPTIONS, TABLE_COLUMNS, LogIndex, LogViewer
 
 
@@ -39,13 +39,12 @@ def test_repaint_reads_through_core_queries():
     # The table payload is shaped from the core query builders: tail by default,
     # by_level when a level is set, search when text is present.
     with open_logs() as logs:
-        nu.runtime.execute(_seed_view(["app"]), logs.ctx)
+        nu.run(_seed_view(["app"]), logs.ctx)
         app = logs.stream("app")
         app.info("connection opened", a=1)
         app.error("boom")
-        build_table = _make_build_table(logs)
 
-        payload = build_table()
+        payload = _build_table(logs)
         assert payload["columns"] == TABLE_COLUMNS
         # newest-first: the error landed last
         assert [r[2] for r in payload["rows"]] == ["boom", "connection opened"]
@@ -55,7 +54,7 @@ def test_repaint_reads_through_core_queries():
 
 def test_view_state_seeded_defaults():
     with open_logs() as logs:
-        nu.runtime.execute(_seed_view(["scraper", "app"]), logs.ctx)
+        nu.run(_seed_view(["scraper", "app"]), logs.ctx)
         stream, level, search = _read_view(logs)
         assert stream == "scraper"
         assert level == LEVEL_OPTIONS[0]  # "all"

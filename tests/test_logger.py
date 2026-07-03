@@ -1,8 +1,7 @@
 """The write face: eager methods, compose mode, ids, stream isolation."""
 
 import nu
-import nu_virtuals as nv
-from nu import runtime
+import nu.virtuals as nv
 
 from nulog import open_logs
 from nulog.logger import new_entry_id
@@ -70,12 +69,12 @@ def test_compose_log_plus_write_is_atomic(logs):
         balance = nv.IntRef.slot()
 
     app = logs.stream("app")
-    runtime.execute(
+    nu.run(
         nv.Transaction(Account.balance.store(100), app.entry("info", "debit", amount=5)),
         logs.ctx,
     )
     # both landed
-    bal = runtime.collect(nv.Snapshot(nu.IntForm(Account.balance)), logs.ctx)[0]
+    bal = nu.run(nv.Snapshot(nu.IntForm(Account.balance)), logs.ctx)[0]
     assert bal == 100
     rec = app.tail(1)[0]
     assert rec.msg == "debit"

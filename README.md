@@ -9,9 +9,9 @@ canonical Nu WRITE. Reading the logs back is a Nu Query. Same language both
 directions, so there is no separate format for emitting versus searching.
 
 Persistence, structure, and querying all come from the nu stack for free.
-nu_virtuals gives you rocksdb-backed storage when you want logs on disk, nu_mem
-gives you an in-memory log when you do not. nulog is the thin app on top that
-decides what a log entry looks like and how you read it back.
+`nu.virtuals` gives you rocksdb-backed storage: on disk when you want logs to
+persist, in-memory when you do not. nulog is the thin app on top that decides
+what a log entry looks like and how you read it back.
 
 ## Usage
 
@@ -41,7 +41,7 @@ append Command without running it, so you can weave a log line into a bigger
 program and get an atomic log-plus-effect:
 
 ```python
-import nu_virtuals as nv
+import nu.virtuals as nv
 nv.Transaction(Account.balance.store(new), app.entry("info", "debit", amount=n))
 ```
 
@@ -96,4 +96,4 @@ make test      # run the suite
 make lint      # ruff check
 ```
 
-Part of the nu stack (nustackdev), alongside nu, nu_virtuals, nudle, nuspace.
+Part of the nu stack (nustackdev), alongside nu, virtuals, nudle, nuspace.

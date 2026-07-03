@@ -18,16 +18,12 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 
 import nu
-import nu_virtuals as nv
-from nu import runtime
+import nu.virtuals as nv
 
 from .shapes import Streams
 
 
 __all__ = ["LogRecord", "read_records"]
-
-# The slot index the batch read binds each iteration to (0..3 -> ts/level/msg/fields).
-_SLOT = nu.IntAttrRef("slot")
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,11 +46,6 @@ class LogRecord:
     fields: dict[str, object] = field(default_factory=dict)
 
 
-def _guarded(ref: nu.Nu, default: object, form: type) -> nu.Nu:
-    """A slot read with a missing-slot fallback: ``If(missing, default, Form(ref))``."""
-    return nu.If(ref.missing(), nu.Literal(default), form(ref))
-
-
 def _decode_fields(raw: str) -> dict[str, object]:
     """Decode an entry's ``fields`` JSON slot into a dict (``{}`` when blank/bad)."""
     if not raw:
@@ -70,19 +61,19 @@ def read_entry(ctx: nu.Context, stream: str, entry_id: str) -> LogRecord:
     """Read one entry record into a :class:`LogRecord`.
 
     All four slots (``ts``, ``level``, ``msg``, ``fields``) are read in ONE
-    ``nv.Snapshot`` generation: a ``Map`` over the slot index yields the four
-    guarded values in order, so it's ~1 round-trip per entry, not 4.
+    ``nv.Snapshot`` generation: a ``DictForm.of`` gathers them into one dict, so
+    it's ~1 round-trip per entry, not 4. A missing slot reads as ``EMPTY`` and is
+    coerced to its typed default below.
     """
     entry = Streams.logs[stream].entries[entry_id]
-    slots = [
-        _guarded(entry.ts, 0, nu.IntForm),
-        _guarded(entry.level, "", nu.StrForm),
-        _guarded(entry.msg, "", nu.StrForm),
-        _guarded(entry.fields, "", nu.StrForm),
-    ]
-    pick = nu.Switch(_SLOT, dict(enumerate(slots)))
-    batch = nu.Map(nu.Iter(nu.Literal(list(range(len(slots))))), transform=pick, item="slot")
-    ts, level, msg, fields = runtime.collect(nv.Snapshot(batch), ctx)
+    read = nu.DictForm.of(
+        ts=nu.IntForm(entry.ts),
+        level=nu.StrForm(entry.level),
+        msg=nu.StrForm(entry.msg),
+        fields=nu.StrForm(entry.fields),
+    )
+    data = nu.run(nv.Snapshot(read), ctx)[0]
+    ts, level, msg, fields = data["ts"], data["level"], data["msg"], data["fields"]
     return LogRecord(
         id=entry_id,
         ts=ts if isinstance(ts, int) else 0,
@@ -93,7 +84,12 @@ def read_entry(ctx: nu.Context, stream: str, entry_id: str) -> LogRecord:
 
 
 def read_records(
-    ctx: nu.Context, stream: str, id_query: nu.Nu, *, presorted: bool = False
+    ctx: nu.Context,
+    stream: str,
+    id_query: nu.Nu,
+    *,
+    presorted: bool = False,
+    limit: int | None = None,
 ) -> list[LogRecord]:
     """Run an entry-id query and decode the hits into records, newest-first.
 
@@ -102,16 +98,24 @@ def read_records(
         stream: the stream name the ids belong to.
         id_query: a Nu Query yielding entry ids (from :mod:`nulog.query`).
         presorted: when True the query already yields ids newest-first (the
-            ``tail`` path sorts and limits in Nu), so skip the Python-side sort.
+            ``tail`` path sorts in Nu), so skip the Python-side sort.
+        limit: keep at most this many records. On the presorted (``tail``) path
+            the ids are sliced before decoding, so only ``limit`` entries are
+            read; otherwise the slice is applied after the sort.
 
     Returns:
         The matching entries as :class:`LogRecord`s, sorted by ``ts`` descending
         (ties broken by id, also descending) so the most recent line is first.
     """
-    ids = runtime.collect(nv.Snapshot(id_query), ctx)[0]
-    records = [read_entry(ctx, stream, eid) for eid in _as_ids(ids)]
-    if not presorted:
-        records.sort(key=lambda r: (r.ts, r.id), reverse=True)
+    ids = _as_ids(nu.run(nv.Snapshot(id_query), ctx)[0])
+    if presorted:
+        if limit is not None:
+            ids = ids[:limit]
+        return [read_entry(ctx, stream, eid) for eid in ids]
+    records = [read_entry(ctx, stream, eid) for eid in ids]
+    records.sort(key=lambda r: (r.ts, r.id), reverse=True)
+    if limit is not None:
+        records = records[:limit]
     return records
 
 
