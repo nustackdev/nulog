@@ -1,68 +1,104 @@
-"""The store layout -- the single source of truth for a nulog store.
+"""The store layout -- one picture of the two Nu trees behind nulog.
 
-nulog is append-only logs kept in nv (the RocksDB-backed Shape fabric). One store
-holds many named streams ("app", "scraper", ...). A stream is a Log, a Log is a
-dict of entries keyed by a sortable entry id, and an entry is four slots:
+Two disjoint Shape trees share one virtuals Navigator:
 
-- ``ts``     -- epoch millis, when the line was written.
-- ``level``  -- one of ``"debug"`` / ``"info"`` / ``"warn"`` / ``"error"``.
-- ``msg``    -- the human message.
-- ``fields`` -- a JSON object string of structured kwargs, decoded to a dict on
-  read (the same trick nuspace uses for block meta).
+- :class:`Logs` -- append-only log streams. Each stream is a kh57 shapes map of
+  :class:`LogEntry`, keyed by an integer minted at eval time via
+  :data:`nulog.writes.NextLogKey` (see the key encoding there).
+- :class:`Metrics` -- kh57 time series. Each series is a kh57 shapes map of
+  :class:`MetricPoint`, keyed by microsecond epoch time.
 
-Nothing here is ever updated in place. A log line is one new entry under a fresh
-id, so the whole store is append-only and history is just the keyset.
+Kh57 gives us chronological order for free, cheap ``entries.range(begin, end)``
+scans for time windows, and ``entries.sample(n, ...)`` reservoir sampling for
+chart thinning -- one substrate for both domains.
 
-Navigation mirrors nuspace: ``Streams.logs[stream].entries[entry_id].ts``, and so
-on. Entry ids are minted in Python (see :mod:`nulog.logger`), no seq counter in
-the store.
+:class:`ViewState` is the viewer's tiny server-side mirror of the browser's
+filter picks; the tick reads it, so the table always reflects the current
+selection without round-tripping to the tab every second.
 """
 
 from __future__ import annotations
 
 import nu
-import nu.virtuals as nv
 
 
-__all__ = ["Log", "LogEntry", "Streams"]
+__all__ = [
+    "LEVELS",
+    "LogEntry",
+    "LogStream",
+    "Logs",
+    "MetricPoint",
+    "MetricSeries",
+    "Metrics",
+    "ViewState",
+]
+
+# Canonical severity levels the viewer tallies. Any string level is valid on
+# write; these four just get first-class count Refs on the page.
+LEVELS: tuple[str, ...] = ("debug", "info", "warn", "error")
+
+
+# ---- logs -----------------------------------------------------------------
 
 
 class LogEntry(nu.Shape):
-    """One log entry -- a single immutable line.
+    """One log line -- immutable.
 
-    Attributes:
-        ts: epoch millis at write time (the clock the read layer sorts on).
-        level: the severity, one of ``"debug"`` / ``"info"`` / ``"warn"`` /
-            ``"error"``.
-        msg: the human-readable message.
-        fields: structured kwargs as a JSON object string (``"{}"`` when none),
-            decoded back to a dict on read.
+    ``ts_us`` is absolute epoch microseconds (redundant with ``key >> 8`` on the
+    parent kh57 map, kept as a leaf so reads don't decode the key). ``fields``
+    is a JSON string blob of structured kwargs.
     """
 
-    ts = nv.IntRef.slot()
-    level = nv.StrRef.slot()
-    msg = nv.StrRef.slot()
-    fields = nv.StrRef.slot()  # JSON object string of structured kwargs
+    ts_us: nu.v.IntRef
+    level: nu.v.StrRef
+    msg: nu.v.StrRef
+    fields: nu.v.StrRef
 
 
-class Log(nu.Shape):
-    """One named stream -- an append-only dict of entries keyed by entry id.
+class LogStream(nu.Shape):
+    """One named stream -- a kh57 map of entries, chronological by key."""
 
-    Attributes:
-        entries: maps a sortable entry id to its :class:`LogEntry`. Append-only:
-            a new line is a new key, existing keys are never rewritten.
+    entries: nu.v.Kh57ShapesRef[LogEntry]
+
+
+class Logs(nu.Shape):
+    """The log store root -- every stream, keyed by name."""
+
+    streams: nu.v.ShapesDictRef[str, LogStream]
+
+
+# ---- metrics --------------------------------------------------------------
+
+
+class MetricPoint(nu.Shape):
+    """One metric sample -- precise float wall-clock ts + numeric value.
+
+    ``ts`` is the float epoch-seconds at write time; the kh57 key on the
+    parent :class:`MetricSeries` is ``int(ts * 1_000_000)`` (microseconds).
     """
 
-    entries = nv.ShapesDictRef.slot(LogEntry, key_type=str)
+    ts: nu.v.FloatRef
+    value: nu.v.FloatRef
 
 
-class Streams(nu.Shape):
-    """The store root -- every stream, keyed by name.
+class MetricSeries(nu.Shape):
+    """One named time series -- kh57 int->MetricPoint map."""
 
-    Attributes:
-        logs: maps a stream name (``"app"``, ``"scraper"``, ...) to its
-            :class:`Log`. One store holds them all; a Navigator bound to this
-            shape is what the logger and queries run against.
-    """
+    points: nu.v.Kh57ShapesRef[MetricPoint]
 
-    logs = nv.ShapesDictRef.slot(Log, key_type=str)
+
+class Metrics(nu.Shape):
+    """The metrics store root -- every named series, keyed by name."""
+
+    series: nu.v.ShapesDictRef[str, MetricSeries]
+
+
+# ---- viewer state ---------------------------------------------------------
+
+
+class ViewState(nu.Shape):
+    """Server-side mirror of the viewer's current filter, read by the tick."""
+
+    stream: nu.v.StrRef
+    level: nu.v.StrRef      # "all" | "debug" | "info" | "warn" | "error"
+    search: nu.v.StrRef

@@ -1,50 +1,41 @@
-"""nulog basics: write lines across levels and streams, then read them back.
+"""nulog basics: write lines across levels and streams, read them back.
 
-Run it:
+The whole app is one Nu tree. Writes compose under a `Transaction`, reads
+compose under `Snapshot` and get piped through `nu.print`. No held ctx, no
+imperative Python.
 
-    .venv/bin/python examples/basic.py
+Run::
 
-Uses an in-memory store (open_logs() with no path), so it leaves nothing behind.
+    python examples/basic.py
 """
 
-from nulog import open_logs
+from __future__ import annotations
+
+import nu
+
+import nulog
 
 
-def main():
-    with open_logs() as logs:
-        app = logs.stream("app")
-        scraper = logs.stream("scraper")
+writes = (
+    nulog.info("app", "server started", port=8080, env="dev")
+    >> nulog.debug("app", "config loaded", source="env")
+    >> nulog.warn("app", "cache miss", key="user:42")
+    >> nulog.error("app", "request failed", path="/checkout", code=500)
+    >> nulog.info("app", "request ok", path="/", ms=12)
+    >> nulog.info("scraper", "scrape started", target="example.com")
+    >> nulog.error("scraper", "blocked", status=429)
+)
 
-        # write a handful of lines across levels, with structured fields
-        app.info("server started", port=8080, env="dev")
-        app.debug("config loaded", source="env")
-        app.warn("cache miss", key="user:42")
-        app.error("request failed", path="/checkout", code=500)
-        app.info("request ok", path="/", ms=12)
+reads = (
+    nu.v.Snapshot(nu.print("== app: tail(3) ==", nulog.tail("app", 3)))
+    >> nu.v.Snapshot(nu.print("== app: errors ==", nulog.errors("app")))
+    >> nu.v.Snapshot(nu.print("== app: count_by_level ==", nulog.count_by_level("app")))
+    >> nu.v.Snapshot(nu.print("== app: search 'request' ==", nulog.search("app", "request")))
+    >> nu.v.Snapshot(nu.print("== scraper: tail(5) ==", nulog.tail("scraper", 5)))
+)
 
-        scraper.info("scrape started", target="example.com")
-        scraper.error("blocked", status=429)
-
-        print("== app: tail(3) ==")
-        for r in app.tail(3):
-            print(f"  [{r.level:5}] {r.msg}  {r.fields}")
-
-        print("\n== app: errors only ==")
-        for r in app.errors():
-            print(f"  [{r.level:5}] {r.msg}  {r.fields}")
-
-        print("\n== app: count by level ==")
-        for level, n in app.count_by_level().items():
-            print(f"  {level:5} {n}")
-
-        print("\n== app: search 'request' ==")
-        for r in app.search("request"):
-            print(f"  [{r.level:5}] {r.msg}  {r.fields}")
-
-        print("\n== scraper: tail(5) (separate stream) ==")
-        for r in scraper.tail(5):
-            print(f"  [{r.level:5}] {r.msg}  {r.fields}")
+tree = nu.With(nulog.store(), body=nu.v.Transaction(writes) >> reads)
 
 
 if __name__ == "__main__":
-    main()
+    nu.run(tree)

@@ -1,92 +1,106 @@
 # nulog
 
-Logging as a Nu app: append-only logs over any storage, written and queried in Nu.
+Logging + metrics as a Nu app. Append-only logs and kh57-backed metric series
+kept in `nu.v`, written and read in Nu. Every write is a Nu Command; every
+read is a Nu Query. Nothing imperative.
 
 ## Why
 
-A log line is just data you append and never change. In nulog that line is the
-canonical Nu WRITE. Reading the logs back is a Nu Query. Same language both
-directions, so there is no separate format for emitting versus searching.
+A log line is data you append and never change. In nulog that line is a Nu
+WRITE (a Command that folds into any bigger Transaction). Reading the logs is
+a Nu Query (a tree of `IterQuery`/`FilterQuery`/`MapQuery`/`CollectQuery`
+walking the same shape refs the writer stored to). Same language both
+directions, same tree.
 
-Persistence, structure, and querying all come from the nu stack for free.
-`nu.virtuals` gives you rocksdb-backed storage: on disk when you want logs to
-persist, in-memory when you do not. nulog is the thin app on top that decides
-what a log entry looks like and how you read it back.
+Persistence comes from `nu.v` (RocksDB via virtuals). Metric series ride on
+top of kh57 — sparse int-keyed time series with cheap range reservoir
+sampling for chart thinning. Both logs and metrics are `Kh57ShapesRef` maps,
+so they share the same substrate.
 
 ## Usage
 
-```python
-from nulog import open_logs
-
-with open_logs() as logs:          # in-memory; pass a path for on-disk rocksdb
-    app = logs.stream("app")       # one named stream of many in the store
-
-    app.info("server started", port=8080)
-    app.warn("cache miss", key="user:42")
-    app.error("request failed", code=500)
-
-    app.tail(10)            # most recent lines, newest-first (list of LogRecord)
-    app.errors()            # error lines only
-    app.count_by_level()    # {"debug": 0, "info": 1, "warn": 1, "error": 1}
-    app.search("request")   # lines whose message contains the text
-    app.since(ts_ms)        # lines at or after a timestamp
-```
-
-A line carries structured `**fields` (any JSON-serializable kwargs), kept as a
-JSON string in the store and decoded back to a dict on read. Reads come back as
-frozen `LogRecord(id, ts, level, msg, fields)`.
-
-Compose mode is the Nu payoff: `app.entry(level, msg, **fields)` returns the
-append Command without running it, so you can weave a log line into a bigger
-program and get an atomic log-plus-effect:
+Everything happens inside a `nulog.store(...)` bracket. Writes are Nu
+Commands, reads are Nu Queries that yield `list[dict]` or `dict[str, int]`.
 
 ```python
-import nu.virtuals as nv
-nv.Transaction(Account.balance.store(new), app.entry("info", "debit", amount=n))
+import nu, nulog
+
+tree = nu.With(nulog.store(),
+    body=nu.v.Transaction(
+        nulog.info("app", "server started", port=8080)
+        >> nulog.warn("app", "cache miss", key="user:42")
+        >> nulog.error("app", "request failed", path="/checkout", code=500)
+        >> nulog.observe("cpu_load", 0.42)
+    )
+    >> nu.v.Snapshot(nu.print("tail:", nulog.tail("app", 3)))
+    >> nu.v.Snapshot(nu.print("errors:", nulog.errors("app")))
+    >> nu.v.Snapshot(nu.print("count:", nulog.count_by_level("app"))),
+)
+
+nu.run(tree)
 ```
 
-The runnable example is `examples/basic.py`.
+Read atoms cover the search space:
+
+- Logs: `tail(stream, n)`, `head(stream, n)`, `by_level(stream, level)`,
+  `errors(stream)`, `since(stream, ts_us)`,
+  `between(stream, start_us, end_us)`, `search(stream, text)`,
+  `count_by_level(stream)`.
+- Metrics: `range_metric(name, begin, end)`,
+  `sample_metric(name, n, begin, end)`.
+
+Rows come out as plain dicts. Log rows:
+`{"key": int, "ts_us": int, "level": str, "msg": str, "fields": dict}`.
+Metric rows: `{"ts_us": int, "ts": float, "value": float}`.
+
+Compose mode is the Nu payoff: every write is a Command, so a log line rides
+inside any bigger atomic program in the tree.
+
+```python
+nu.v.Transaction(Account.balance.store(new), nulog.info("app", "debit", amount=n))
+```
 
 ## Viewer (`[ui]` extra)
 
-A log line is a Nu read; so is the viewer. `nulog[ui]` adds a browser viewer
-(built on [nudle](https://github.com/nustackdev/nudle)) that queries a store in
-the same language the writer used: the table is fed by `query.tail` /
-`query.by_level` / `query.search`, the counts by `count_by_level`.
-
-```sh
-pip install nulog[ui]
-python examples/viewer.py    # then open http://127.0.0.1:8080
-```
-
-You get one page: a live, newest-first entry table (time / level / message /
-fields), a stream switcher, a level filter, a message search box, and per-level
-count stats. The table and counts repaint every second, so new lines surface
-live. The whole UI is read-only over the logs -- mounting a viewer never mutates
-the store. The viewer serves itself through `run_viewer`, no nudle CLI needed;
-to embed it in a host process:
+The viewer is a bracket too: `nulog.ui(streams, port=)` boots a nudle server
+under `nulog.store(...)`. Same shape as any Nu-nudle app.
 
 ```python
-from nulog import open_logs
-from nulog.ui import run_viewer
+import asyncio, nu, nulog
 
-with open_logs("/var/log/myapp") as logs:
-    run_viewer(["app", "scraper"], logs=logs)   # blocks, serves on :8080
+tree = nu.With(
+    nulog.store("logs.db"),
+    nulog.ui(["app", "scraper"], port=8080),
+    body=nulog.info("app", "server started")
+         >> nu.ForeverDo(
+             nu.v.Transaction(nulog.info("app", "tick")) >> nu.Delay(1.5)
+         ),
+)
+
+asyncio.run(nu.arun(tree))
 ```
 
-The viewer code lives in `src/nulog/ui/`; the runnable demo is
-`examples/viewer.py`. The core package never imports nudle, so plain `nulog`
-works without the extra.
+Open <http://127.0.0.1:8080>: live newest-first entry table, stream switcher,
+level filter, message search, per-level count stats. The table + counts
+repaint every second off the same read atoms above.
 
 ## Layout
 
-- `shapes.py` - the `LogEntry`, `Log`, and `Streams` shapes (the store layout)
-- `logger.py` - the write face: eager `info`/`warn`/`error`/`debug`/`log` and
-  compose-mode `entry`, plus the read convenience methods
-- `query.py` - the read face: pure Nu Query builders (`by_level`, `since`,
-  `between`, `search`, `count_by_level`, ...)
-- `records.py` - `LogRecord` and the reader that decodes a query into records
-- `presets.py` - `open_logs` and the `Logs` handle (rocksdb wiring)
+- `shapes.py` — the two Nu Shape trees: `Logs / LogStream / LogEntry`,
+  `Metrics / MetricSeries / MetricPoint`, plus `ViewState` for the viewer.
+  Both stream shapes use `Kh57ShapesRef` so range/sample are cheap on both.
+- `writes.py` — the write Commands (`entry / info / warn / error / debug /
+  log / observe`) plus the `@nu.host` seams that mint eval-time values
+  (`NowUs`, `NowSeconds`, `EncodeLogKey`, `FieldsAsJson`).
+- `reads.py` — the read Queries. Everything composes from
+  `IterQuery / FilterQuery / MapQuery / CollectQuery / ReversedQuery /
+  CountQuery / GetItemQuery / SliceQuery / DictForm.of` over the kh57 shape
+  maps. One `@nu.host` (`FieldsFromJson`) decodes the opaque JSON blob.
+- `viewer.py` — the browser page + reactive tree, same shape as `wish_jar.py`
+  / `counter.py` in `nu/examples/nudle/`. Two `@nu.host` formatters (`FmtTs`,
+  `FmtFields`) plus `RowAsList` for the table wire payload.
+- `__init__.py` — the two brackets (`store(path=None)` and `ui(streams,
+  port=)`) plus the re-exports.
 
 ## Dev quickstart
 
@@ -96,4 +110,4 @@ make test      # run the suite
 make lint      # ruff check
 ```
 
-Part of the nu stack (nustackdev), alongside nu, virtuals, nudle, nuspace.
+Part of the nu stack (nustackdev), alongside nu, virtuals, nudle, kh57.

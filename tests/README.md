@@ -1,1 +1,0 @@
-# Nulog Test Suite
