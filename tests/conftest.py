@@ -8,8 +8,6 @@ its writes with ``nu.run(nu.v.Transaction(cmd), ctx)`` and its reads with
 
 from __future__ import annotations
 
-import tempfile
-import uuid
 from typing import TYPE_CHECKING
 
 import nu
@@ -23,7 +21,6 @@ if TYPE_CHECKING:
 
 @pytest.fixture
 def ctx() -> Generator[nu.Context, None, None]:
-    """A fresh in-memory Context bound to a unique nulog store."""
-    store_dir = f"{tempfile.gettempdir()}/nulog-test-{uuid.uuid4().hex}"
-    with nu.v.presets.rocksdb_storage_inmemory(store_dir) as storage:
+    """A fresh in-memory Context bound to a nulog store (per-test isolation)."""
+    with nu.v.presets.memory_storage() as storage:
         yield nu.Context().bind(Navigator, Navigator(storage))

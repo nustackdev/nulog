@@ -23,28 +23,32 @@ import nulog
 STREAMS = ["app", "scraper"]
 
 
+app = nulog.getLogger("app")
+scraper = nulog.getLogger("scraper")
+
+
 def _seed() -> nu.Nu:
     return nu.v.Transaction(
-        nulog.info("app", "server started", port=8080)
-        >> nulog.debug("app", "config loaded", source="env")
-        >> nulog.warn("app", "cache miss", key="user:42")
-        >> nulog.error("app", "request failed", path="/checkout", code=500)
-        >> nulog.info("scraper", "scrape started", target="example.com")
-        >> nulog.error("scraper", "blocked", status=429),
+        app.info("server started", extra={"port": 8080})
+        >> app.debug("config loaded", extra={"source": "env"})
+        >> app.warning("cache miss", extra={"key": "user:42"})
+        >> app.error("request failed", extra={"path": "/checkout", "code": 500})
+        >> scraper.info("scrape started", extra={"target": "example.com"})
+        >> scraper.error("blocked", extra={"status": 429}),
     )
 
 
 def _tick() -> nu.Nu:
     return nu.ForeverDo(
-        nu.v.Transaction(nulog.info("app", "tick"))
+        nu.v.Transaction(app.info("tick"))
         >> nu.Delay(1.5)
-        >> nu.v.Transaction(nulog.warn("app", "slow request", ms=210))
+        >> nu.v.Transaction(app.warning("slow request", extra={"ms": 210}))
         >> nu.Delay(1.5)
-        >> nu.v.Transaction(nulog.info("scraper", "page fetched", url="/robots.txt"))
+        >> nu.v.Transaction(scraper.info("page fetched", extra={"url": "/robots.txt"}))
         >> nu.Delay(1.5)
-        >> nu.v.Transaction(nulog.error("scraper", "429 blocked"))
+        >> nu.v.Transaction(scraper.error("429 blocked"))
         >> nu.Delay(1.5)
-        >> nu.v.Transaction(nulog.debug("app", "gc pause", ms=8))
+        >> nu.v.Transaction(app.debug("gc pause", extra={"ms": 8}))
         >> nu.Delay(1.5),
     )
 

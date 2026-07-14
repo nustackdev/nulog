@@ -33,9 +33,10 @@ __all__ = [
     "ViewState",
 ]
 
-# Canonical severity levels the viewer tallies. Any string level is valid on
-# write; these four just get first-class count Refs on the page.
-LEVELS: tuple[str, ...] = ("debug", "info", "warn", "error")
+# Canonical severity levels stored on the ``level`` slot. Matches Python
+# ``logging``'s named levels (lowercase). Any string is valid on write; these
+# five are the canonical set the viewer's per-level count refs enumerate.
+LEVELS: tuple[str, ...] = ("debug", "info", "warning", "error", "critical")
 
 
 # ---- logs -----------------------------------------------------------------

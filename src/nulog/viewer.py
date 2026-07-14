@@ -100,8 +100,9 @@ class ViewerPage(nu.nd.Page):
 
     debug_stat = nu.nd.StatRef.slot()
     info_stat = nu.nd.StatRef.slot()
-    warn_stat = nu.nd.StatRef.slot()
+    warning_stat = nu.nd.StatRef.slot()
     error_stat = nu.nd.StatRef.slot()
+    critical_stat = nu.nd.StatRef.slot()
 
     stream = nu.nd.SelectRef.slot()
     level = nu.nd.SelectRef.slot()
@@ -161,14 +162,15 @@ def _table_payload() -> nu.Nu:
 
 
 def _repaint() -> nu.Nu:
-    """One repaint pass: refresh the table and the four per-level count Stats."""
+    """One repaint pass: refresh the table and the five per-level count Stats."""
     counts = count_by_level(ViewState.stream)
     return (
         ViewerPage.table.store(_table_payload())
         | ViewerPage.debug_stat.store_value(nu.StrQuery(nu.GetItemQuery(counts, "debug")))
         | ViewerPage.info_stat.store_value(nu.StrQuery(nu.GetItemQuery(counts, "info")))
-        | ViewerPage.warn_stat.store_value(nu.StrQuery(nu.GetItemQuery(counts, "warn")))
+        | ViewerPage.warning_stat.store_value(nu.StrQuery(nu.GetItemQuery(counts, "warning")))
         | ViewerPage.error_stat.store_value(nu.StrQuery(nu.GetItemQuery(counts, "error")))
+        | ViewerPage.critical_stat.store_value(nu.StrQuery(nu.GetItemQuery(counts, "critical")))
     )
 
 
@@ -193,12 +195,14 @@ def _hydrate_chrome(streams: tuple[str, ...]) -> nu.Nu:
         ViewerPage.heading.store("nulog viewer", level=2)
         | ViewerPage.debug_stat.store_label("debug")
         | ViewerPage.info_stat.store_label("info")
-        | ViewerPage.warn_stat.store_label("warn")
+        | ViewerPage.warning_stat.store_label("warning")
         | ViewerPage.error_stat.store_label("error")
+        | ViewerPage.critical_stat.store_label("critical")
         | ViewerPage.debug_stat.store_trend("flat")
         | ViewerPage.info_stat.store_trend("flat")
-        | ViewerPage.warn_stat.store_trend("flat")
+        | ViewerPage.warning_stat.store_trend("flat")
         | ViewerPage.error_stat.store_trend("flat")
+        | ViewerPage.critical_stat.store_trend("flat")
         | ViewerPage.stream.store_options(stream_opts)
         | ViewerPage.stream.store(opening)
         | ViewerPage.level.store_options(list(LEVEL_OPTIONS))

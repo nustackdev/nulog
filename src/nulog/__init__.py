@@ -2,19 +2,33 @@
 
 Two domains share one RocksDB (via ``nu.v``): logs and metrics, both kh57 shape
 maps. One bracket to provide the store, one bracket to boot the browser
-viewer, one body of writes-and-reads. Full app in one tree::
+viewer, one body of writes-and-reads. The write API mirrors
+``nu.std.logging`` (and Python's ``logging``) 1-1::
 
     import nu, nulog
 
+    log = nulog.getLogger("app")
+
     tree = nu.With(nulog.store(),
         body=nu.v.Transaction(
-            nulog.info("app", "started", port=8080)
-            >> nulog.warn("app", "slow", ms=210)
+            log.info("started", extra={"port": 8080})
+            >> log.warning("slow: %s ms", 210)
             >> nulog.observe("cpu_load", 0.42),
         )
         >> nu.v.Snapshot(nu.print(nulog.tail("app", 10))),
     )
     nu.run(tree)
+
+Or write app code in ``nu.std.logging`` style and swap to persistence with
+the :func:`from_std_logging` rewriter (Python's ``logging`` stays the
+default sink; the rewriter walks the tree and swaps every log statement
+for the equivalent persistent write into kh57 storage)::
+
+    from nu.std import logging
+    log = logging.getLogger("app")
+
+    body = log.info("started") >> log.warning("slow: %s ms", 210)
+    tree = nu.With(nulog.store(), body=nulog.from_std_logging(body))
 
 Live viewer::
 
@@ -22,7 +36,7 @@ Live viewer::
         nulog.store("logs.db"),
         nulog.ui(["app", "scraper"], port=8080),
         body=nu.ForeverDo(
-            nu.v.Transaction(nulog.info("app", "tick")) >> nu.Delay(1.5),
+            nu.v.Transaction(nulog.getLogger("app").info("tick")) >> nu.Delay(1.5),
         ),
     )
     asyncio.run(nu.arun(tree))
@@ -48,6 +62,7 @@ from .reads import (
     since,
     tail,
 )
+from .rewrite import from_std_logging
 from .shapes import (
     LEVELS,
     LogEntry,
@@ -66,7 +81,26 @@ from .viewer import (
     ViewerPage,
     build_ui,
 )
-from .writes import debug, entry, error, info, log, observe, warn
+from .writes import (
+    CRITICAL,
+    DEBUG,
+    ERROR,
+    FATAL,
+    INFO,
+    NOTSET,
+    WARN,
+    WARNING,
+    Logger,
+    critical,
+    debug,
+    error,
+    getLogger,
+    info,
+    log,
+    observe,
+    warn,
+    warning,
+)
 
 
 if TYPE_CHECKING:
@@ -75,15 +109,24 @@ if TYPE_CHECKING:
     from nu.context.fabric import Provide
 
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 
 __all__ = [
+    "CRITICAL",
+    "DEBUG",
     "DEFAULT_LEVEL",
+    "ERROR",
+    "FATAL",
+    "INFO",
     "LEVELS",
     "LEVEL_OPTIONS",
+    "NOTSET",
     "TABLE_COLUMNS",
+    "WARN",
+    "WARNING",
     "LogEntry",
     "LogStream",
+    "Logger",
     "Logs",
     "MetricPoint",
     "MetricSeries",
@@ -95,10 +138,12 @@ __all__ = [
     "build_ui",
     "by_level",
     "count_by_level",
+    "critical",
     "debug",
-    "entry",
     "error",
     "errors",
+    "from_std_logging",
+    "getLogger",
     "head",
     "info",
     "log",
@@ -111,6 +156,7 @@ __all__ = [
     "tail",
     "ui",
     "warn",
+    "warning",
 ]
 
 
@@ -120,13 +166,16 @@ def _scratch_dir() -> str:
 
 
 def store(path: str | None = None) -> nu.With:
-    """A bracket providing Codec + Observer + RocksDB + Navigator.
+    """A bracket providing Codec + Observer + storage + Navigator.
 
-    On-disk when ``path`` is given (durable); fresh in-memory scratch otherwise.
-    Every ``nulog.entry``/``.info``/``.observe``/``.tail``/... inside the body
-    reads and writes through it.
+    On-disk RocksDB when ``path`` is given (durable); pure in-memory when
+    ``None`` (default -- fresh per call, gone on process exit). Every
+    ``nulog.getLogger(...)`` / ``.info()`` / ``.observe()`` / ``.tail()``
+    / ... inside the body reads and writes through it.
     """
-    return nu.v.presets.rocksdb_navigator_inmemory(path if path is not None else _scratch_dir())
+    if path is None:
+        return nu.v.presets.memory_navigator()
+    return nu.v.presets.rocksdb_navigator(path)
 
 
 def ui(

@@ -1,6 +1,14 @@
-"""Log writes + reads: level shortcuts, ordering, filters, ranges, search, counts."""
+"""Log writes + reads: Logger API, ordering, filters, ranges, search, counts.
+
+The write API mirrors ``nu.std.logging`` / Python ``logging``: ``getLogger(name)``
+returns a ``Logger`` bound to the given stream, whose ``.info/.warning/.error``
+methods return persistent-write Nu trees. Reads still work through the
+current tail/head/by_level/... surface (Cycle B will reshape reads).
+"""
 
 from __future__ import annotations
+
+import logging as pylogging
 
 import nu
 
@@ -20,15 +28,37 @@ def _read(ctx, atom):
 # ---- write shape ----------------------------------------------------------
 
 
+def test_getLogger_returns_a_bound_Logger():  # noqa: N802
+    log = nulog.getLogger("app")
+    assert isinstance(log, nulog.Logger)
+    assert log.name == "app"
+
+
+def test_getLogger_with_no_arg_uses_root():  # noqa: N802
+    assert nulog.getLogger().name == "root"
+    assert nulog.getLogger(None).name == "root"
+
+
+def test_level_constants_match_stdlib():
+    assert nulog.DEBUG == pylogging.DEBUG
+    assert nulog.INFO == pylogging.INFO
+    assert nulog.WARNING == pylogging.WARNING
+    assert nulog.WARN == pylogging.WARNING
+    assert nulog.ERROR == pylogging.ERROR
+    assert nulog.CRITICAL == pylogging.CRITICAL
+    assert nulog.FATAL == pylogging.CRITICAL
+
+
 def test_write_returns_nu_without_executing(ctx):
     """Building an entry doesn't touch the store."""
-    cmd = nulog.entry("app", "info", "deferred")
+    cmd = nulog.getLogger("app").info("deferred")
     assert isinstance(cmd, nu.Nu)
     assert _read(ctx, nulog.tail("app", 5)) == []
 
 
 def test_append_and_tail(ctx):
-    _write(ctx, nulog.info("app", "started", port=8080, host="localhost"))
+    log = nulog.getLogger("app")
+    _write(ctx, log.info("started", extra={"port": 8080, "host": "localhost"}))
     rows = _read(ctx, nulog.tail("app", 10))
     assert len(rows) == 1
     r = rows[0]
@@ -39,36 +69,62 @@ def test_append_and_tail(ctx):
     assert isinstance(r["key"], int) and r["key"] > 0
 
 
-def test_no_fields_decodes_to_empty_dict(ctx):
-    _write(ctx, nulog.info("app", "bare"))
+def test_no_extra_decodes_to_empty_dict(ctx):
+    _write(ctx, nulog.getLogger("app").info("bare"))
     assert _read(ctx, nulog.tail("app", 1))[0]["fields"] == {}
 
 
 def test_level_shortcuts(ctx):
-    _write(ctx, nulog.debug("app", "d"))
-    _write(ctx, nulog.info("app", "i"))
-    _write(ctx, nulog.warn("app", "w"))
-    _write(ctx, nulog.error("app", "e"))
+    log = nulog.getLogger("app")
+    _write(ctx, log.debug("d"))
+    _write(ctx, log.info("i"))
+    _write(ctx, log.warning("w"))
+    _write(ctx, log.error("e"))
+    _write(ctx, log.critical("c"))
     rows = _read(ctx, nulog.tail("app", 10))
-    assert [r["level"] for r in rows] == ["error", "warn", "info", "debug"]
+    assert [r["level"] for r in rows] == ["critical", "error", "warning", "info", "debug"]
 
 
-def test_generic_log_function(ctx):
-    _write(ctx, nulog.log("app", "warn", "via log", k=1))
+def test_warn_is_stdlib_alias_for_warning(ctx):
+    _write(ctx, nulog.getLogger("app").warn("via warn"))
+    assert _read(ctx, nulog.tail("app", 1))[0]["level"] == "warning"
+
+
+def test_generic_log_method(ctx):
+    _write(
+        ctx,
+        nulog.getLogger("app").log(pylogging.WARNING, "via log", extra={"k": 1}),
+    )
     r = _read(ctx, nulog.tail("app", 1))[0]
-    assert r["level"] == "warn"
+    assert r["level"] == "warning"
     assert r["fields"] == {"k": 1}
+
+
+def test_percent_formatting_of_args(ctx):
+    log = nulog.getLogger("app")
+    _write(ctx, log.error("slot %s failed after %s attempts", 42, 5))
+    r = _read(ctx, nulog.tail("app", 1))[0]
+    assert r["msg"] == "slot 42 failed after 5 attempts"
+    assert r["level"] == "error"
+
+
+def test_module_level_shortcuts_target_root_stream(ctx):
+    _write(ctx, nulog.info("root-level"))
+    r = _read(ctx, nulog.tail("root", 1))[0]
+    assert r["msg"] == "root-level"
+    assert r["level"] == "info"
 
 
 def test_compose_log_with_other_writes_is_atomic(ctx):
     """A log Command composes with any other Command inside one Transaction."""
+
     class Account(nu.Shape):
         balance = nu.v.IntRef.slot()
 
     nu.run(
         nu.v.Transaction(
             Account.balance.store(100),
-            nulog.info("app", "debit", amount=5),
+            nulog.getLogger("app").info("debit", extra={"amount": 5}),
         ),
         ctx,
     )
@@ -81,10 +137,11 @@ def test_compose_log_with_other_writes_is_atomic(ctx):
 
 def test_loop_mints_fresh_key_each_iteration(ctx):
     """A write inside a loop mints a fresh kh57 key per eval (not per build)."""
+    log = nulog.getLogger("app")
     nu.run(
         nu.ForEachDo(
             nu.IterQuery(nu.LiteralQuery([1, 2, 3, 4, 5])),
-            nu.v.Transaction(nulog.info("app", "tick")),
+            nu.v.Transaction(log.info("tick")),
             item="_nl_i",
         ),
         ctx,
@@ -98,17 +155,19 @@ def test_loop_mints_fresh_key_each_iteration(ctx):
 
 
 def test_streams_are_isolated(ctx):
-    _write(ctx, nulog.info("app", "app line"))
-    _write(ctx, nulog.info("scraper", "scraper line"))
+    app = nulog.getLogger("app")
+    scraper = nulog.getLogger("scraper")
+    _write(ctx, app.info("app line"))
+    _write(ctx, scraper.info("scraper line"))
     assert [r["msg"] for r in _read(ctx, nulog.tail("app", 10))] == ["app line"]
     assert [r["msg"] for r in _read(ctx, nulog.tail("scraper", 10))] == ["scraper line"]
 
 
 def test_unwritten_stream_is_clean(ctx):
-    _write(ctx, nulog.info("app", "x"))
+    _write(ctx, nulog.getLogger("app").info("x"))
     assert _read(ctx, nulog.tail("ghost", 5)) == []
     assert _read(ctx, nulog.count_by_level("ghost")) == {
-        "debug": 0, "info": 0, "warn": 0, "error": 0,
+        "debug": 0, "info": 0, "warning": 0, "error": 0, "critical": 0,
     }
 
 
@@ -116,21 +175,24 @@ def test_unwritten_stream_is_clean(ctx):
 
 
 def test_tail_is_newest_first(ctx):
+    log = nulog.getLogger("app")
     for msg in ("first", "second", "third"):
-        _write(ctx, nulog.info("app", msg))
+        _write(ctx, log.info(msg))
     assert [r["msg"] for r in _read(ctx, nulog.tail("app", 10))] == ["third", "second", "first"]
 
 
 def test_tail_limits_to_n(ctx):
+    log = nulog.getLogger("app")
     for i in range(5):
-        _write(ctx, nulog.info("app", f"m{i}"))
+        _write(ctx, log.info("m%s", i))
     rows = _read(ctx, nulog.tail("app", 2))
     assert [r["msg"] for r in rows] == ["m4", "m3"]
 
 
 def test_head_is_oldest_first(ctx):
+    log = nulog.getLogger("app")
     for msg in ("first", "second", "third"):
-        _write(ctx, nulog.info("app", msg))
+        _write(ctx, log.info(msg))
     assert [r["msg"] for r in _read(ctx, nulog.head("app", 10))] == ["first", "second", "third"]
 
 
@@ -138,32 +200,35 @@ def test_head_is_oldest_first(ctx):
 
 
 def test_by_level_keeps_only_that_level(ctx):
-    _write(ctx, nulog.info("app", "i1"))
-    _write(ctx, nulog.error("app", "e1"))
-    _write(ctx, nulog.warn("app", "w1"))
-    _write(ctx, nulog.error("app", "e2"))
+    log = nulog.getLogger("app")
+    _write(ctx, log.info("i1"))
+    _write(ctx, log.error("e1"))
+    _write(ctx, log.warning("w1"))
+    _write(ctx, log.error("e2"))
     errs = {r["msg"] for r in _read(ctx, nulog.by_level("app", "error"))}
     assert errs == {"e1", "e2"}
     assert [r["msg"] for r in _read(ctx, nulog.by_level("app", "info"))] == ["i1"]
 
 
 def test_errors_shortcut(ctx):
-    _write(ctx, nulog.info("app", "ok"))
-    _write(ctx, nulog.error("app", "bad"))
+    log = nulog.getLogger("app")
+    _write(ctx, log.info("ok"))
+    _write(ctx, log.error("bad"))
     assert [r["msg"] for r in _read(ctx, nulog.errors("app"))] == ["bad"]
 
 
 def test_search_substring(ctx):
-    _write(ctx, nulog.info("app", "connection opened"))
-    _write(ctx, nulog.info("app", "connection closed"))
-    _write(ctx, nulog.info("app", "unrelated"))
+    log = nulog.getLogger("app")
+    _write(ctx, log.info("connection opened"))
+    _write(ctx, log.info("connection closed"))
+    _write(ctx, log.info("unrelated"))
     hits = {r["msg"] for r in _read(ctx, nulog.search("app", "connection"))}
     assert hits == {"connection opened", "connection closed"}
     assert [r["msg"] for r in _read(ctx, nulog.search("app", "closed"))] == ["connection closed"]
 
 
 def test_search_no_match_is_empty(ctx):
-    _write(ctx, nulog.info("app", "hello"))
+    _write(ctx, nulog.getLogger("app").info("hello"))
     assert _read(ctx, nulog.search("app", "zzz")) == []
 
 
@@ -171,18 +236,20 @@ def test_search_no_match_is_empty(ctx):
 
 
 def test_since_filters_by_ts(ctx):
-    _write(ctx, nulog.info("app", "old"))
+    log = nulog.getLogger("app")
+    _write(ctx, log.info("old"))
     old_us = _read(ctx, nulog.tail("app", 1))[0]["ts_us"]
-    _write(ctx, nulog.info("app", "new"))
+    _write(ctx, log.info("new"))
     new_rows = _read(ctx, nulog.since("app", old_us + 1))
     assert "new" in {r["msg"] for r in new_rows}
     assert "old" not in {r["msg"] for r in new_rows}
 
 
 def test_between_is_half_open(ctx):
-    _write(ctx, nulog.info("app", "a"))
+    log = nulog.getLogger("app")
+    _write(ctx, log.info("a"))
     a_us = _read(ctx, nulog.tail("app", 1))[0]["ts_us"]
-    _write(ctx, nulog.info("app", "b"))
+    _write(ctx, log.info("b"))
     b_us = _read(ctx, nulog.tail("app", 1))[0]["ts_us"]
     got = {r["msg"] for r in _read(ctx, nulog.between("app", a_us, b_us + 1))}
     assert got == {"a", "b"}
@@ -194,12 +261,13 @@ def test_between_is_half_open(ctx):
 
 
 def test_count_by_level(ctx):
-    _write(ctx, nulog.info("app", "i"))
-    _write(ctx, nulog.info("app", "i2"))
-    _write(ctx, nulog.warn("app", "w"))
-    _write(ctx, nulog.error("app", "e"))
+    log = nulog.getLogger("app")
+    _write(ctx, log.info("i"))
+    _write(ctx, log.info("i2"))
+    _write(ctx, log.warning("w"))
+    _write(ctx, log.error("e"))
     assert _read(ctx, nulog.count_by_level("app")) == {
-        "debug": 0, "info": 2, "warn": 1, "error": 1,
+        "debug": 0, "info": 2, "warning": 1, "error": 1, "critical": 0,
     }
 
 
@@ -212,7 +280,7 @@ def test_empty_stream_all_reads_are_clean(ctx):
     assert _read(ctx, nulog.between("app", 0, 10**15)) == []
     assert _read(ctx, nulog.search("app", "anything")) == []
     assert _read(ctx, nulog.count_by_level("app")) == {
-        "debug": 0, "info": 0, "warn": 0, "error": 0,
+        "debug": 0, "info": 0, "warning": 0, "error": 0, "critical": 0,
     }
 
 
@@ -221,10 +289,11 @@ def test_empty_stream_all_reads_are_clean(ctx):
 
 def test_bracket_form_all_in_one_tree():
     """Full Nu-app shape: bracket + writes + reads composed under one nu.With."""
+    log = nulog.getLogger("app")
     tree = nu.With(
         nulog.store(),
         body=nu.v.Transaction(
-            nulog.info("app", "bracketed", n=1) >> nulog.error("app", "boom"),
+            log.info("bracketed", extra={"n": 1}) >> log.error("boom"),
         )
         >> nu.v.Snapshot(nu.print(nulog.tail("app", 10))),
     )

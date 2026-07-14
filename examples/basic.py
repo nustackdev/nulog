@@ -16,14 +16,18 @@ import nu
 import nulog
 
 
+app = nulog.getLogger("app")
+scraper = nulog.getLogger("scraper")
+
+
 writes = (
-    nulog.info("app", "server started", port=8080, env="dev")
-    >> nulog.debug("app", "config loaded", source="env")
-    >> nulog.warn("app", "cache miss", key="user:42")
-    >> nulog.error("app", "request failed", path="/checkout", code=500)
-    >> nulog.info("app", "request ok", path="/", ms=12)
-    >> nulog.info("scraper", "scrape started", target="example.com")
-    >> nulog.error("scraper", "blocked", status=429)
+    app.info("server started", extra={"port": 8080, "env": "dev"})
+    >> app.debug("config loaded", extra={"source": "env"})
+    >> app.warning("cache miss", extra={"key": "user:42"})
+    >> app.error("request failed", extra={"path": "/checkout", "code": 500})
+    >> app.info("request ok", extra={"path": "/", "ms": 12})
+    >> scraper.info("scrape started", extra={"target": "example.com"})
+    >> scraper.error("blocked", extra={"status": 429})
 )
 
 reads = (

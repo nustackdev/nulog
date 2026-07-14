@@ -26,7 +26,7 @@ def test_page_has_all_viewer_refs():
     slots = ViewerPage._slots
     for name in ("heading", "table", "stream", "level", "search"):
         assert name in slots
-    for name in ("debug_stat", "info_stat", "warn_stat", "error_stat"):
+    for name in ("debug_stat", "info_stat", "warning_stat", "error_stat", "critical_stat"):
         assert name in slots
 
 
@@ -35,7 +35,7 @@ def test_index_registers_one_page():
 
 
 def test_level_options_include_all_severities():
-    assert set(LEVEL_OPTIONS) == {DEFAULT_LEVEL, "debug", "info", "warn", "error"}
+    assert set(LEVEL_OPTIONS) == {DEFAULT_LEVEL, "debug", "info", "warning", "error", "critical"}
 
 
 def test_table_columns_shape():
@@ -50,10 +50,11 @@ def test_build_ui_returns_nu():
 @pytest.mark.parametrize("level_filter", [DEFAULT_LEVEL, "error"])
 def test_repaint_reads_current_stream(ctx, level_filter):
     """After seeding ViewState, the repaint's table payload reflects the store."""
+    app = nulog.getLogger("app")
     nu.run(
         nu.v.Transaction(
-            nulog.info("app", "hi", n=1)
-            >> nulog.error("app", "boom", code=500),
+            app.info("hi", extra={"n": 1})
+            >> app.error("boom", extra={"code": 500}),
         ),
         ctx,
     )
@@ -78,6 +79,6 @@ def test_repaint_reads_current_stream(ctx, level_filter):
 
 
 def test_repaint_composes_as_nu(ctx):
-    """`_repaint()` returns a Nu tree of table + four stat stores composed with `|`."""
+    """`_repaint()` returns a Nu tree of table + five stat stores composed with `|`."""
     tree = _repaint()
     assert isinstance(tree, nu.Nu)

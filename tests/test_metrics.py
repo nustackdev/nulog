@@ -70,7 +70,7 @@ def test_compose_metric_and_log_is_atomic(ctx):
     """A metric and a log write ride the same Transaction."""
     nu.run(
         nu.v.Transaction(
-            nulog.info("app", "sample recorded", n=1),
+            nulog.getLogger("app").info("sample recorded", extra={"n": 1}),
             nulog.observe("throughput", 100.0, ts=1000.0),
         ),
         ctx,
