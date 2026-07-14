@@ -46,7 +46,9 @@ dependencies = [
 [tool.uv.sources]
 nu = { path = "../nu", editable = true }
 virtuals-py = { path = "../virtuals", editable = true }
-nudle = { path = "../nudle/api", editable = true }
+virtuals-binary-codec = { path = "../virtuals/lib/binary-codec", editable = true }
+kh57 = { path = "../kh57", editable = true }
+nudle = { path = "../nu/src/nu/ui/nudle", editable = true }
 
 [project.urls]
 Homepage = "https://github.com/nustackdev/nulog"
