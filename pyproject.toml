@@ -13,7 +13,7 @@ name = "nulog"
 version = "0.1.0"
 description = "Logging as a Nu app: append-only logs over any storage, written and queried in Nu."
 readme = "README.md"
-license = "MIT"
+license = "Apache-2.0"
 authors = [
     {name = "Gor Arakelyan", email = "gorarkln@gmail.com"}
 ]
