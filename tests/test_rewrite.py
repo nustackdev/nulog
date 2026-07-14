@@ -3,9 +3,9 @@
 App code writes ``log.info(...)`` / ``log.warning(...)`` via ``nu.std.logging``;
 wrapping the tree in :func:`nulog.from_std_logging` swaps every ``LogCommand``
 for the equivalent ``nulog`` persistent-write subtree. After that rewrite the
-tree compiles and runs like any other Nu tree -- log records land in kh57
-shape maps under a ``nulog.store(...)`` bracket, no Python ``logging``
-involved.
+tree compiles and runs like any other Nu tree -- log records land in the
+per-stream ``entries`` list under a ``nulog.store(...)`` bracket, no Python
+``logging`` involved.
 """
 
 from __future__ import annotations
@@ -65,14 +65,14 @@ def test_rewrite_is_a_pure_construction_time_pass():
     assert body is not rewritten
 
 
-# ---- functional: writes land in kh57 storage --------------------------------
+# ---- functional: writes land in the store ----------------------------------
 
 
 def test_rewritten_info_lands_in_the_named_stream(ctx):
     log = nu_logging.getLogger("app")
     _write(ctx, nulog.from_std_logging(log.info("hello")))
 
-    rows = _read(ctx, nulog.tail("app", 5))
+    rows = _read(ctx, nulog.messages.tail("app", 5))
     assert len(rows) == 1
     assert rows[0]["msg"] == "hello"
     assert rows[0]["level"] == "info"
@@ -82,7 +82,7 @@ def test_rewritten_percent_args_format_at_eval_time(ctx):
     log = nu_logging.getLogger("app")
     _write(ctx, nulog.from_std_logging(log.error("slot %s failed after %s attempts", 42, 5)))
 
-    r = _read(ctx, nulog.tail("app", 1))[0]
+    r = _read(ctx, nulog.messages.tail("app", 1))[0]
     assert r["msg"] == "slot 42 failed after 5 attempts"
     assert r["level"] == "error"
 
@@ -91,7 +91,7 @@ def test_rewritten_extra_survives_as_fields(ctx):
     log = nu_logging.getLogger("app")
     _write(ctx, nulog.from_std_logging(log.warning("checkout failed", extra={"code": 500, "user": "u42"})))
 
-    r = _read(ctx, nulog.tail("app", 1))[0]
+    r = _read(ctx, nulog.messages.tail("app", 1))[0]
     assert r["level"] == "warning"
     assert r["fields"] == {"code": 500, "user": "u42"}
 
@@ -104,7 +104,7 @@ def test_rewritten_every_python_level_maps_to_canonical_name(ctx):
     _write(ctx, nulog.from_std_logging(log.error("e")))
     _write(ctx, nulog.from_std_logging(log.critical("c")))
 
-    rows = _read(ctx, nulog.tail("app", 10))
+    rows = _read(ctx, nulog.messages.tail("app", 10))
     assert [r["level"] for r in rows] == ["critical", "error", "warning", "info", "debug"]
 
 
@@ -112,7 +112,7 @@ def test_rewritten_int_level_via_generic_log_also_normalizes(ctx):
     log = nu_logging.getLogger("app")
     _write(ctx, nulog.from_std_logging(log.log(pylogging.WARNING, "via log")))
 
-    r = _read(ctx, nulog.tail("app", 1))[0]
+    r = _read(ctx, nulog.messages.tail("app", 1))[0]
     assert r["level"] == "warning"
 
 
@@ -123,7 +123,7 @@ def test_rewritten_composed_seq_writes_in_order(ctx):
     _write(ctx, nulog.from_std_logging(body))
 
     # tail is newest-first
-    assert [r["msg"] for r in _read(ctx, nulog.tail("app", 5))] == ["third", "second", "first"]
+    assert [r["msg"] for r in _read(ctx, nulog.messages.tail("app", 5))] == ["third", "second", "first"]
 
 
 def test_rewritten_stays_atomic_inside_a_transaction(ctx):
@@ -138,7 +138,7 @@ def test_rewritten_stays_atomic_inside_a_transaction(ctx):
 
     bal = nu.run(nu.v.Snapshot(nu.IntForm(Account.balance)), ctx)[0]
     assert bal == 100
-    r = _read(ctx, nulog.tail("app", 1))[0]
+    r = _read(ctx, nulog.messages.tail("app", 1))[0]
     assert r["msg"] == "debit"
     assert r["fields"] == {"amount": 5}
 
@@ -153,5 +153,5 @@ def test_rewritten_multiple_loggers_route_to_separate_streams(ctx):
     body = app.info("app line") >> scraper.info("scraper line")
     _write(ctx, nulog.from_std_logging(body))
 
-    assert [r["msg"] for r in _read(ctx, nulog.tail("app", 5))] == ["app line"]
-    assert [r["msg"] for r in _read(ctx, nulog.tail("scraper", 5))] == ["scraper line"]
+    assert [r["msg"] for r in _read(ctx, nulog.messages.tail("app", 5))] == ["app line"]
+    assert [r["msg"] for r in _read(ctx, nulog.messages.tail("scraper", 5))] == ["scraper line"]

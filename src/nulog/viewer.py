@@ -1,20 +1,21 @@
 """The browser log viewer -- one nudle Page, one Nu tree.
 
-Shape (mirrors the wish_jar / counter examples):
+Shape:
 
-- One :class:`ViewerPage` with heading, four per-level count Stats, a stream
-  picker + level filter + search box, and the entry table.
+- One :class:`ViewerPage` with heading, filters (stream picker + level + search),
+  and the entry table.
 - One :class:`ViewerIndex` (the browser entrypoint) with title, nav, and one
   page at ``/``.
 - One :func:`build_ui` returning the reactive Nu tree: seed :class:`ViewState`,
   hydrate page chrome, then race a live tick against three ``ReactForever``
   handlers -- one per filter input.
 
-Every read the tick does is a Nu tree: the table payload comes from
-``CollectQuery(MapQuery(kh57 range, RowAsList(...), key="item"))``; the four
-per-level counts come from :func:`nulog.reads.count_by_level`. The two
-``@nu.host`` seams are :data:`FmtTs` (microsecond -> ``HH:MM:SS.mmm``) and
-:data:`FmtFields` (JSON string -> ``k=v k=v``) -- pure formatting, no ctx.
+Every read the tick does is a Nu tree: the table payload comes from a
+``tail`` window (last ``TAIL_LIMIT`` entries of the selected stream) with
+optional in-window level + substring predicates applied by
+``FilterQuery``. The two ``@nu.host`` seams are :data:`FmtTs`
+(microsecond -> ``HH:MM:SS.mmm``) and :data:`FmtFields` (JSON string ->
+``k=v k=v``) -- pure formatting, no ctx.
 """
 
 from __future__ import annotations
@@ -24,13 +25,7 @@ import json
 
 import nu
 
-from .reads import (
-    _KH57_MAX,
-    _filter_pairs,
-    _pairs,
-    count_by_level,
-)
-from .shapes import LEVELS, ViewState
+from .messages.shape import LEVELS, Messages
 
 
 __all__ = [
@@ -40,6 +35,7 @@ __all__ = [
     "FmtFields",
     "FmtTs",
     "RowAsList",
+    "ViewState",
     "ViewerIndex",
     "ViewerPage",
     "build_ui",
@@ -53,11 +49,22 @@ TICK_SECONDS = 1.0
 TAIL_LIMIT = 200
 
 
+# ---- viewer state --------------------------------------------------------
+
+
+class ViewState(nu.Shape):
+    """Server-side mirror of the viewer's current filter, read by the tick."""
+
+    stream: nu.v.StrRef
+    level: nu.v.StrRef       # "all" | "debug" | "info" | "warning" | "error" | "critical"
+    search: nu.v.StrRef
+
+
 # ---- @nu.host: value-only formatting seams -------------------------------
 
 
 @nu.host
-def FmtTs(ts_us: int) -> str:  # noqa: N802 -- atom class name is CamelCase
+def FmtTs(ts_us: int) -> str:  # noqa: N802
     """Format a microsecond ts as ``HH:MM:SS.mmm`` (local clock)."""
     if not ts_us or ts_us <= 0:
         return ""
@@ -94,20 +101,12 @@ def RowAsList(time: str, level: str, msg: str, fields: str) -> list:  # noqa: N8
 
 
 class ViewerPage(nu.nd.Page):
-    """The one viewer page: heading, per-level counts, filters, entries table."""
+    """The viewer page: heading, filters, entries table."""
 
     heading = nu.nd.HeadingRef.slot()
-
-    debug_stat = nu.nd.StatRef.slot()
-    info_stat = nu.nd.StatRef.slot()
-    warning_stat = nu.nd.StatRef.slot()
-    error_stat = nu.nd.StatRef.slot()
-    critical_stat = nu.nd.StatRef.slot()
-
     stream = nu.nd.SelectRef.slot()
     level = nu.nd.SelectRef.slot()
     search = nu.nd.InputRef.slot()
-
     table = nu.nd.TableRef.slot()
 
 
@@ -119,15 +118,30 @@ class ViewerIndex(nu.nd.Index):
     pages = nu.nd.Pages({"/": ViewerPage})
 
 
-# ---- table + counts builders ---------------------------------------------
-
+# ---- table builders ------------------------------------------------------
+#
+# The tail slice is materialized into a list of shape views; we iterate it
+# newest-first via ReversedQuery and bind each entry view to _nl_item, then
+# apply the current ViewState-driven predicates.
 
 _ITEM = nu.AnyAttrRef("_nl_item")
-_VIEW = nu.GetItemQuery(_ITEM, 1)
-_TS_US = nu.GetItemQuery(_VIEW, "ts_us")
-_LEVEL = nu.GetItemQuery(_VIEW, "level")
-_MSG = nu.GetItemQuery(_VIEW, "msg")
-_FIELDS_STR = nu.GetItemQuery(_VIEW, "fields")
+_TS_US = nu.GetItemQuery(_ITEM, "ts_us")
+_LEVEL = nu.GetItemQuery(_ITEM, "level")
+_MSG = nu.GetItemQuery(_ITEM, "msg")
+_FIELDS_STR = nu.GetItemQuery(_ITEM, "fields")
+
+
+def _tail_window() -> nu.Nu:
+    """Newest-first entry-view stream for the current ViewState.stream.
+
+    Reads only the last ``TAIL_LIMIT`` entries: ``len -> slice[len-N:len]
+    -> reverse``. Safe at trillion-entry scale.
+    """
+    entries = Messages.streams[ViewState.stream].entries
+    length = entries.len()
+    start = nu.IfQuery(nu.GeQuery(length, TAIL_LIMIT), length - TAIL_LIMIT, nu.LiteralQuery(0))
+    window = nu.GetItemQuery(entries, nu.SliceQuery(start, length, 1))
+    return nu.IterQuery(nu.ReversedQuery(window))
 
 
 def _matches_level() -> nu.Nu:
@@ -148,30 +162,23 @@ def _matches_search() -> nu.Nu:
 
 def _table_rows() -> nu.Nu:
     """Newest-first rows for the current ViewState filter, capped at TAIL_LIMIT."""
-    pairs = _pairs(ViewState.stream, begin=0, end=_KH57_MAX)
-    kept = _filter_pairs(pairs, nu.AndQuery(_matches_level(), _matches_search()))
-    ordered = nu.CollectQuery(nu.ReversedQuery(kept))
-    limited = nu.IterQuery(nu.GetItemQuery(ordered, nu.SliceQuery(0, TAIL_LIMIT, 1)))
+    kept = nu.FilterQuery(
+        _tail_window(),
+        nu.AndQuery(_matches_level(), _matches_search()),
+        key="_nl_item",
+    )
     row = RowAsList(FmtTs(_TS_US), _LEVEL, _MSG, FmtFields(_FIELDS_STR))
-    return nu.CollectQuery(nu.MapQuery(limited, row, key="_nl_item"))
+    return nu.CollectQuery(nu.MapQuery(kept, row, key="_nl_item"))
 
 
 def _table_payload() -> nu.Nu:
-    """The `{columns, rows}` dict payload the TableRef's `.store(...)` expects."""
+    """The ``{columns, rows}`` dict payload the TableRef's ``.store(...)`` expects."""
     return nu.DictForm.of(columns=list(TABLE_COLUMNS), rows=_table_rows())
 
 
 def _repaint() -> nu.Nu:
-    """One repaint pass: refresh the table and the five per-level count Stats."""
-    counts = count_by_level(ViewState.stream)
-    return (
-        ViewerPage.table.store(_table_payload())
-        | ViewerPage.debug_stat.store_value(nu.StrQuery(nu.GetItemQuery(counts, "debug")))
-        | ViewerPage.info_stat.store_value(nu.StrQuery(nu.GetItemQuery(counts, "info")))
-        | ViewerPage.warning_stat.store_value(nu.StrQuery(nu.GetItemQuery(counts, "warning")))
-        | ViewerPage.error_stat.store_value(nu.StrQuery(nu.GetItemQuery(counts, "error")))
-        | ViewerPage.critical_stat.store_value(nu.StrQuery(nu.GetItemQuery(counts, "critical")))
-    )
+    """One repaint pass: refresh the table."""
+    return ViewerPage.table.store(_table_payload())
 
 
 # ---- seed + hydrate + build ----------------------------------------------
@@ -188,21 +195,11 @@ def _seed_view(streams: tuple[str, ...]) -> nu.Nu:
 
 
 def _hydrate_chrome(streams: tuple[str, ...]) -> nu.Nu:
-    """Seed the static page chrome: heading, stat labels, filter options + values."""
+    """Seed the static page chrome: heading, filter options + values."""
     opening = streams[0] if streams else "app"
     stream_opts = list(streams) or [opening]
     return nu.v.Snapshot(
         ViewerPage.heading.store("nulog viewer", level=2)
-        | ViewerPage.debug_stat.store_label("debug")
-        | ViewerPage.info_stat.store_label("info")
-        | ViewerPage.warning_stat.store_label("warning")
-        | ViewerPage.error_stat.store_label("error")
-        | ViewerPage.critical_stat.store_label("critical")
-        | ViewerPage.debug_stat.store_trend("flat")
-        | ViewerPage.info_stat.store_trend("flat")
-        | ViewerPage.warning_stat.store_trend("flat")
-        | ViewerPage.error_stat.store_trend("flat")
-        | ViewerPage.critical_stat.store_trend("flat")
         | ViewerPage.stream.store_options(stream_opts)
         | ViewerPage.stream.store(opening)
         | ViewerPage.level.store_options(list(LEVEL_OPTIONS))

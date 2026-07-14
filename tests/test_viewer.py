@@ -16,6 +16,7 @@ from nulog.viewer import (
     TABLE_COLUMNS,
     ViewerIndex,
     ViewerPage,
+    ViewState,
     _repaint,
     _table_payload,
     build_ui,
@@ -25,8 +26,6 @@ from nulog.viewer import (
 def test_page_has_all_viewer_refs():
     slots = ViewerPage._slots
     for name in ("heading", "table", "stream", "level", "search"):
-        assert name in slots
-    for name in ("debug_stat", "info_stat", "warning_stat", "error_stat", "critical_stat"):
         assert name in slots
 
 
@@ -58,8 +57,6 @@ def test_repaint_reads_current_stream(ctx, level_filter):
         ),
         ctx,
     )
-    from nulog.shapes import ViewState
-
     nu.run(
         nu.v.Transaction(
             ViewState.stream.store("app")
@@ -79,6 +76,6 @@ def test_repaint_reads_current_stream(ctx, level_filter):
 
 
 def test_repaint_composes_as_nu(ctx):
-    """`_repaint()` returns a Nu tree of table + five stat stores composed with `|`."""
+    """`_repaint()` returns a Nu tree that stores the table payload."""
     tree = _repaint()
     assert isinstance(tree, nu.Nu)

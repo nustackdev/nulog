@@ -31,11 +31,10 @@ writes = (
 )
 
 reads = (
-    nu.v.Snapshot(nu.print("== app: tail(3) ==", nulog.tail("app", 3)))
-    >> nu.v.Snapshot(nu.print("== app: errors ==", nulog.errors("app")))
-    >> nu.v.Snapshot(nu.print("== app: count_by_level ==", nulog.count_by_level("app")))
-    >> nu.v.Snapshot(nu.print("== app: search 'request' ==", nulog.search("app", "request")))
-    >> nu.v.Snapshot(nu.print("== scraper: tail(5) ==", nulog.tail("scraper", 5)))
+    nu.v.Snapshot(nu.print("== app: tail(3) ==", nulog.messages.tail("app", 3)))
+    >> nu.v.Snapshot(nu.print("== app: slice(0,3) ==", nulog.messages.slice("app", 0, 3)))
+    >> nu.v.Snapshot(nu.print("== app: point(1) ==", nulog.messages.point("app", 1)))
+    >> nu.v.Snapshot(nu.print("== scraper: tail(5) ==", nulog.messages.tail("scraper", 5)))
 )
 
 tree = nu.With(nulog.store(), body=nu.v.Transaction(writes) >> reads)

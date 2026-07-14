@@ -4,7 +4,7 @@ import nulog
 
 
 def test_version():
-    assert nulog.__version__ == "0.6.0"
+    assert nulog.__version__ == "0.7.0"
 
 
 def test_public_surface():
@@ -12,14 +12,26 @@ def test_public_surface():
         assert hasattr(nulog, name), name
 
 
-def test_dropped_imperatives():
-    """The old imperative surface stayed dropped."""
-    for name in ("open_logs", "read_records", "LogRecord", "MetricPointRow", "entry"):
+def test_submodules_are_reachable():
+    """Reads live on ``nulog.messages`` / ``nulog.metrics`` -- no top-level shadow."""
+    for name in ("tail", "slice", "point", "getLogger", "Logger", "from_std_logging"):
+        assert hasattr(nulog.messages, name), name
+    for name in ("range", "sample", "point", "observe"):
+        assert hasattr(nulog.metrics, name), name
+
+
+def test_dropped_read_surface():
+    """The old full-scan read atoms stayed dropped."""
+    for name in (
+        "head", "by_level", "errors", "search", "since", "between",
+        "count_by_level", "range_metric", "sample_metric",
+        "open_logs", "read_records", "LogRecord",
+    ):
         assert not hasattr(nulog, name), name
 
 
-def test_new_logger_surface_present():
-    """The Python-``logging`` -shape wrapper is the public write surface."""
+def test_top_level_write_shortcuts_present():
+    """The Python-``logging``-shape wrapper is at the top-level for ergonomics."""
     for name in (
         "Logger", "getLogger",
         "debug", "info", "warning", "warn", "error", "critical", "log",

@@ -1,9 +1,10 @@
-"""nulog -- logs + metrics + browser viewer, all as Nu trees.
+"""nulog -- messages + metrics + browser viewer, all as Nu trees.
 
-Two domains share one RocksDB (via ``nu.v``): logs and metrics, both kh57 shape
-maps. One bracket to provide the store, one bracket to boot the browser
-viewer, one body of writes-and-reads. The write API mirrors
-``nu.std.logging`` (and Python's ``logging``) 1-1::
+Two submodules share one RocksDB (via ``nu.v``): :mod:`nulog.messages`
+(append-only log streams on :class:`ShapesListRef`) and :mod:`nulog.metrics`
+(kh57 time series). One bracket to provide the store, one bracket to boot
+the browser viewer, one body of writes-and-reads. The write API mirrors
+``nu.std.logging`` / Python's ``logging`` 1-1::
 
     import nu, nulog
 
@@ -15,14 +16,14 @@ viewer, one body of writes-and-reads. The write API mirrors
             >> log.warning("slow: %s ms", 210)
             >> nulog.observe("cpu_load", 0.42),
         )
-        >> nu.v.Snapshot(nu.print(nulog.tail("app", 10))),
+        >> nu.v.Snapshot(nu.print(nulog.messages.tail("app", 10))),
     )
     nu.run(tree)
 
 Or write app code in ``nu.std.logging`` style and swap to persistence with
 the :func:`from_std_logging` rewriter (Python's ``logging`` stays the
 default sink; the rewriter walks the tree and swaps every log statement
-for the equivalent persistent write into kh57 storage)::
+for the equivalent persistent write)::
 
     from nu.std import logging
     log = logging.getLogger("app")
@@ -50,43 +51,14 @@ from typing import TYPE_CHECKING
 
 import nu
 
-from .reads import (
-    between,
-    by_level,
-    count_by_level,
-    errors,
-    head,
-    range_metric,
-    sample_metric,
-    search,
-    since,
-    tail,
-)
-from .rewrite import from_std_logging
-from .shapes import (
-    LEVELS,
-    LogEntry,
-    Logs,
-    LogStream,
-    MetricPoint,
-    Metrics,
-    MetricSeries,
-    ViewState,
-)
-from .viewer import (
-    DEFAULT_LEVEL,
-    LEVEL_OPTIONS,
-    TABLE_COLUMNS,
-    ViewerIndex,
-    ViewerPage,
-    build_ui,
-)
-from .writes import (
+from . import messages, metrics
+from .messages import (
     CRITICAL,
     DEBUG,
     ERROR,
     FATAL,
     INFO,
+    LEVELS,
     NOTSET,
     WARN,
     WARNING,
@@ -94,12 +66,21 @@ from .writes import (
     critical,
     debug,
     error,
+    from_std_logging,
     getLogger,
     info,
     log,
-    observe,
     warn,
     warning,
+)
+from .metrics import observe
+from .viewer import (
+    DEFAULT_LEVEL,
+    LEVEL_OPTIONS,
+    TABLE_COLUMNS,
+    ViewerIndex,
+    ViewerPage,
+    build_ui,
 )
 
 
@@ -109,7 +90,7 @@ if TYPE_CHECKING:
     from nu.context.fabric import Provide
 
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"
 
 __all__ = [
     "CRITICAL",
@@ -124,36 +105,21 @@ __all__ = [
     "TABLE_COLUMNS",
     "WARN",
     "WARNING",
-    "LogEntry",
-    "LogStream",
     "Logger",
-    "Logs",
-    "MetricPoint",
-    "MetricSeries",
-    "Metrics",
-    "ViewState",
     "ViewerIndex",
     "ViewerPage",
-    "between",
     "build_ui",
-    "by_level",
-    "count_by_level",
     "critical",
     "debug",
     "error",
-    "errors",
     "from_std_logging",
     "getLogger",
-    "head",
     "info",
     "log",
+    "messages",
+    "metrics",
     "observe",
-    "range_metric",
-    "sample_metric",
-    "search",
-    "since",
     "store",
-    "tail",
     "ui",
     "warn",
     "warning",
@@ -170,8 +136,9 @@ def store(path: str | None = None) -> nu.With:
 
     On-disk RocksDB when ``path`` is given (durable); pure in-memory when
     ``None`` (default -- fresh per call, gone on process exit). Every
-    ``nulog.getLogger(...)`` / ``.info()`` / ``.observe()`` / ``.tail()``
-    / ... inside the body reads and writes through it.
+    ``nulog.getLogger(...)`` / ``.info()`` / ``nulog.observe()`` /
+    ``nulog.messages.tail()`` / ... inside the body reads and writes
+    through it.
     """
     if path is None:
         return nu.v.presets.memory_navigator()
@@ -184,9 +151,5 @@ def ui(
     host: str = "127.0.0.1",
     port: int = 8080,
 ) -> Provide:
-    """Boot the nudle log viewer over the enclosing bracket's store.
-
-    Drop under :func:`store` in a ``nu.With(...)`` tree; the viewer reads from
-    whatever Navigator that bracket provides.
-    """
+    """Boot the nudle log viewer over the enclosing bracket's store."""
     return nu.nd.presets.server(build_ui(tuple(streams)), host=host, port=port)

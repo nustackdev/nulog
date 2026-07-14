@@ -1,8 +1,7 @@
 """nulog metrics: observe a burst of samples, read them back range + sample.
 
 One Nu tree. Writes fold as a Sequential of Commands; reads print inside
-`Snapshot`. All the ordering, filtering, and range slicing is kh57 walking
-under the hood.
+`Snapshot`. Kh57 walking under the hood keeps every read cheap.
 
 Run::
 
@@ -37,15 +36,19 @@ tree = nu.With(nulog.store(),
     body=nu.v.Transaction(_burst())
     >> nu.v.Snapshot(nu.print(
         "== cpu_load: range ==",
-        nulog.range_metric("cpu_load", _BEGIN, _END),
+        nulog.metrics.range("cpu_load", _BEGIN, _END),
     ))
     >> nu.v.Snapshot(nu.print(
         "== cpu_load: sample(5) ==",
-        nulog.sample_metric("cpu_load", 5, _BEGIN, _END),
+        nulog.metrics.sample("cpu_load", 5, _BEGIN, _END),
     ))
     >> nu.v.Snapshot(nu.print(
         "== http_latency_ms: sample(5) ==",
-        nulog.sample_metric("http_latency_ms", 5, _BEGIN, _END),
+        nulog.metrics.sample("http_latency_ms", 5, _BEGIN, _END),
+    ))
+    >> nu.v.Snapshot(nu.print(
+        "== cpu_load: point(t0_us) ==",
+        nulog.metrics.point("cpu_load", _BEGIN),
     )),
 )
 
