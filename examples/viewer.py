@@ -21,6 +21,7 @@ import nulog
 
 
 STREAMS = ["app", "scraper", "worker"]
+SERIES = ["cpu_load", "http_latency_ms", "mem_mb"]
 
 
 app = nulog.getLogger("app")
@@ -82,7 +83,7 @@ def _tick() -> nu.Nu:
 
 tree = nu.With(
     nulog.store(),
-    nulog.ui(STREAMS, port=8080),
+    nulog.ui(STREAMS, SERIES, port=8080),
     body=_seed() >> _tick(),
 )
 

@@ -147,9 +147,21 @@ def store(path: str | None = None) -> nu.With:
 
 def ui(
     streams: Sequence[str],
+    series: Sequence[str],
     *,
     host: str = "127.0.0.1",
     port: int = 8080,
 ) -> Provide:
-    """Boot the nudle log viewer over the enclosing bracket's store."""
-    return nu.nd.presets.server(build_ui(tuple(streams)), host=host, port=port)
+    """Boot the nudle log viewer over the enclosing bracket's store.
+
+    Args:
+        streams: message stream names to offer in the messages tab picker.
+        series: metric series names to offer in the metrics tab picker.
+        host: uvicorn bind address (default ``127.0.0.1``).
+        port: uvicorn bind port (default ``8080``).
+    """
+    return nu.nd.presets.server(
+        build_ui(tuple(streams), tuple(series)),
+        host=host,
+        port=port,
+    )

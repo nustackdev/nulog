@@ -1,9 +1,10 @@
-"""Viewer reads -- tail-window scan + filter predicates + table payload.
+"""Messages tab reads -- tail-window scan + filter predicates + table payload.
 
 The tick calls :func:`_repaint`; that returns a Nu store command whose
 payload is the current filtered slice of the selected stream. Only the
 last :data:`~.shape.TAIL_LIMIT` entries are read (``len -> slice ->
-reverse``), so cost is O(TAIL_LIMIT) independent of stream size.
+reverse``), so cost is O(TAIL_LIMIT) independent of stream size --
+billion-entry safe.
 
 Also home to the value-only ``@nu.host`` formatting seams -- :data:`FmtTs`,
 :data:`FmtFields`, :data:`RowAsList` -- pure functions, no ctx.
@@ -17,7 +18,7 @@ import json
 import nu
 
 from ..messages.shape import Messages
-from .shape import DEFAULT_LEVEL, TABLE_COLUMNS, TAIL_LIMIT, ViewerPage, ViewState
+from .shape import DEFAULT_LEVEL, TABLE_COLUMNS, TAIL_LIMIT, MessagesBody, ViewState
 
 
 __all__ = [
@@ -60,7 +61,7 @@ def FmtFields(raw: str) -> str:  # noqa: N802
 
 @nu.host
 def RowAsList(time: str, level: str, msg: str, fields: str) -> list:  # noqa: N802
-    """A positional row for :class:`nu.nd.TableRef` (``store({rows: [...]})``)."""
+    """A positional row for :class:`nu.ui.TableRef` (``set({rows: [...]})``)."""
     return [time, level, msg, fields]
 
 
@@ -118,10 +119,10 @@ def _table_rows() -> nu.Nu:
 
 
 def _table_payload() -> nu.Nu:
-    """The ``{columns, rows}`` dict payload the TableRef's ``.store(...)`` expects."""
+    """The ``{columns, rows}`` dict payload the TableRef's ``.set(...)`` expects."""
     return nu.DictForm.of(columns=list(TABLE_COLUMNS), rows=_table_rows())
 
 
 def _repaint() -> nu.Nu:
-    """One repaint pass: refresh the table."""
-    return ViewerPage.table.set(_table_payload())
+    """One repaint pass: refresh the messages table."""
+    return MessagesBody.table.set(_table_payload())
