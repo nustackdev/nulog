@@ -154,14 +154,20 @@ def ui(
 ) -> Provide:
     """Boot the nudle log viewer over the enclosing bracket's store.
 
+    The viewer tree from :func:`~nulog.ui.build_ui` is scope-free; this
+    entrypoint runs an untagged ``nu.v.auto_flow_atomic`` sweep so a
+    single-store standalone user does not have to think about atomicity.
+    Callers embedding the viewer inside a multi-scope orchestration
+    should call :func:`~nulog.ui.build_ui` directly and wrap themselves
+    with the scopes that match their fabric layout (typically
+    ``scope=Messages`` and ``scope=Metrics``).
+
     Args:
         streams: message stream names to offer in the messages tab picker.
         series: metric series names to offer in the metrics tab picker.
         host: uvicorn bind address (default ``127.0.0.1``).
         port: uvicorn bind port (default ``8080``).
     """
-    return nu.nd.presets.server(
-        build_ui(tuple(streams), tuple(series)),
-        host=host,
-        port=port,
-    )
+    tree = build_ui(tuple(streams), tuple(series))
+    tree = nu.v.auto_flow_atomic(tree)
+    return nu.nd.presets.server(tree, host=host, port=port)

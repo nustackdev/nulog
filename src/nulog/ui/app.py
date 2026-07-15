@@ -57,31 +57,33 @@ if TYPE_CHECKING:
 __all__ = ["build_ui"]
 
 
-def _seed_view(streams: Sequence[str], series: Sequence[str]) -> nu.Nu:
-    """Seed both ViewStates to defaults (first stream / first series)."""
+def _seed_messages(streams: Sequence[str]) -> nu.Nu:
+    """Seed the messages ViewState to defaults (first stream, tail mode)."""
     first_stream = streams[0] if streams else ""
-    first_series = series[0] if series else ""
     return (
         ViewState.stream.store(first_stream)
         >> ViewState.mode.store(DEFAULT_MODE)
         >> ViewState.count.store(DEFAULT_COUNT)
         >> ViewState.level.store(DEFAULT_LEVEL)
         >> ViewState.filter.store("")
-        >> MetricsViewState.series.store(first_series)
+    )
+
+
+def _seed_metrics(series: Sequence[str]) -> nu.Nu:
+    """Seed the metrics ViewState to defaults (first series, default window)."""
+    first_series = series[0] if series else ""
+    return (
+        MetricsViewState.series.store(first_series)
         >> MetricsViewState.window.store(DEFAULT_WINDOW)
     )
 
 
-def _hydrate_chrome(streams: Sequence[str], series: Sequence[str]) -> nu.Nu:
-    """Seed the chrome for both tabs: options, initial values, count bounds."""
+def _hydrate_messages_chrome(streams: Sequence[str]) -> nu.Nu:
+    """Seed the messages tab chrome: options, initial values, count bounds."""
     first_stream = streams[0] if streams else ""
-    first_series = series[0] if series else ""
     stream_opts = list(streams) or [first_stream]
-    series_opts = list(series) or [first_series]
-    return nu.v.Snapshot(
-        ViewerPage.heading.set("nulog viewer", level=2)
-        # messages tab
-        | StreamField.control.set_options(stream_opts)
+    return (
+        StreamField.control.set_options(stream_opts)
         | StreamField.control.set(first_stream)
         | ModeField.control.set_options(list(MODE_OPTIONS))
         | ModeField.control.set(DEFAULT_MODE)
@@ -91,17 +93,19 @@ def _hydrate_chrome(streams: Sequence[str], series: Sequence[str]) -> nu.Nu:
         | LevelField.control.set_options(list(LEVEL_OPTIONS))
         | LevelField.control.set(DEFAULT_LEVEL)
         | FilterField.control.set("")
-        # metrics tab
-        | SeriesField.control.set_options(series_opts)
-        | SeriesField.control.set(first_series)
-        | WindowField.control.set_options(list(WINDOW_OPTIONS))
-        | WindowField.control.set(DEFAULT_WINDOW),
     )
 
 
-def _repaint_both() -> nu.Nu:
-    """One snapshot that touches both the messages table and the metrics chart."""
-    return nu.v.Snapshot(_messages._repaint() | _metrics._repaint())
+def _hydrate_metrics_chrome(series: Sequence[str]) -> nu.Nu:
+    """Seed the metrics tab chrome: series options + window picker."""
+    first_series = series[0] if series else ""
+    series_opts = list(series) or [first_series]
+    return (
+        SeriesField.control.set_options(series_opts)
+        | SeriesField.control.set(first_series)
+        | WindowField.control.set_options(list(WINDOW_OPTIONS))
+        | WindowField.control.set(DEFAULT_WINDOW)
+    )
 
 
 def _messages_reactives() -> nu.Nu:
@@ -109,28 +113,28 @@ def _messages_reactives() -> nu.Nu:
     on_stream = nu.ReactForever(
         StreamField.control.changed(),
         ViewState.stream.store(StreamField.control)
-        >> nu.v.Snapshot(_messages._repaint()),
+        >> _messages._repaint(),
     )
     on_mode = nu.ReactForever(
         ModeField.control.changed(),
         ViewState.mode.store(ModeField.control)
-        >> nu.v.Snapshot(_messages._repaint()),
+        >> _messages._repaint(),
     )
     on_count = nu.ReactForever(
         CountField.control.changed(),
         # NumberInputRef ships a float; cast to int for the slice math.
         ViewState.count.store(nu.IntQuery(CountField.control))
-        >> nu.v.Snapshot(_messages._repaint()),
+        >> _messages._repaint(),
     )
     on_level = nu.ReactForever(
         LevelField.control.changed(),
         ViewState.level.store(LevelField.control)
-        >> nu.v.Snapshot(_messages._repaint()),
+        >> _messages._repaint(),
     )
     on_filter = nu.ReactForever(
         FilterField.control.changed(),
         ViewState.filter.store(FilterField.control)
-        >> nu.v.Snapshot(_messages._repaint()),
+        >> _messages._repaint(),
     )
     return on_stream | on_mode | on_count | on_level | on_filter
 
@@ -140,33 +144,96 @@ def _metrics_reactives() -> nu.Nu:
     on_series = nu.ReactForever(
         SeriesField.control.changed(),
         MetricsViewState.series.store(SeriesField.control)
-        >> nu.v.Snapshot(_metrics._repaint()),
+        >> _metrics._repaint(),
     )
     on_window = nu.ReactForever(
         WindowField.control.changed(),
         MetricsViewState.window.store(WindowField.control)
-        >> nu.v.Snapshot(_metrics._repaint()),
+        >> _metrics._repaint(),
     )
     return on_series | on_window
 
 
-def build_ui(streams: Sequence[str], series: Sequence[str]) -> nu.Nu:
+def build_ui(
+    streams: Sequence[str],
+    series: Sequence[str],
+    *,
+    title: str | None = "nulog viewer",
+    messages_tab: bool = True,
+    metrics_tab: bool = True,
+    heading: str | None = "nulog viewer",
+) -> nu.Nu:
     """The viewer's reactive Nu tree.
 
     Args:
         streams: message stream names for the messages tab switcher.
+            Ignored when ``messages_tab=False``.
         series: metric series names for the metrics tab switcher.
-    """
-    tick = nu.ForeverDo(
-        _repaint_both() >> nu.Delay(nu.LiteralQuery(TICK_SECONDS)),
-    )
-    reactives = tick | _messages_reactives() | _metrics_reactives()
+            Ignored when ``metrics_tab=False``.
+        title: browser-tab title to set on the enclosing Index. Set to
+            ``None`` when embedding into a host Index that owns its own
+            title (e.g. multi-page dashboards). Default matches the
+            standalone :func:`nulog.ui` entrypoint.
+        messages_tab: whether to wire the messages tab. Turn off when
+            the enclosing store has no :class:`~nulog.messages.shape.Messages`
+            navigator (e.g. metrics-only dashboards).
+        heading: page heading text. ``None`` skips writing the heading.
+        metrics_tab: whether to wire the metrics tab. Turn off when the
+            enclosing store has no :class:`~nulog.metrics.shape.Metrics`
+            navigator (e.g. log-only dashboards embedded in a larger app).
 
-    return nu.Provide(
-        dict,
-        {},
-        ViewerIndex.title.set("nulog viewer")
-        >> _seed_view(streams, series)
-        >> _hydrate_chrome(streams, series)
-        >> reactives,
-    )
+    The returned tree is scope-free wrt virtuals: reads and writes on
+    :class:`~nulog.messages.shape.Messages` and
+    :class:`~nulog.metrics.shape.Metrics` are emitted bare so the caller
+    can pick the correct atomicity scope (typically via
+    ``nu.v.auto_flow_atomic(tree, scope=Messages)`` +
+    ``scope=Metrics``). Standalone callers get this automatically via
+    the outer ``nu.arun`` default sweep against a single untagged store.
+    """
+    if not (messages_tab or metrics_tab):
+        msg = "build_ui: at least one of messages_tab / metrics_tab must be True"
+        raise ValueError(msg)
+
+    seeds: list[nu.Nu] = []
+    chrome_parts: list[nu.Nu] = []
+    tick_parts: list[nu.Nu] = []
+    reactive_parts: list[nu.Nu] = []
+
+    if heading is not None:
+        chrome_parts.append(ViewerPage.heading.set(heading, level=2))
+
+    if messages_tab:
+        seeds.append(_seed_messages(streams))
+        chrome_parts.append(_hydrate_messages_chrome(streams))
+        tick_parts.append(_messages._repaint())
+        reactive_parts.append(_messages_reactives())
+
+    if metrics_tab:
+        seeds.append(_seed_metrics(series))
+        chrome_parts.append(_hydrate_metrics_chrome(series))
+        tick_parts.append(_metrics._repaint())
+        reactive_parts.append(_metrics_reactives())
+
+    seed_body = seeds[0]
+    for s in seeds[1:]:
+        seed_body = seed_body >> s
+
+    chrome_body = chrome_parts[0]
+    for c in chrome_parts[1:]:
+        chrome_body = chrome_body | c
+
+    tick_body = tick_parts[0]
+    for t in tick_parts[1:]:
+        tick_body = tick_body | t
+    tick = nu.ForeverDo(tick_body >> nu.Delay(nu.LiteralQuery(TICK_SECONDS)))
+
+    reactives = tick
+    for r in reactive_parts:
+        reactives = reactives | r
+
+    body: nu.Nu = seed_body >> chrome_body
+    if title is not None:
+        body = ViewerIndex.title.set(title) >> body
+    body = body >> reactives
+
+    return nu.Provide(dict, {}, body)
