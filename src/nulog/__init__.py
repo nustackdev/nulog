@@ -74,7 +74,7 @@ from .messages import (
     warning,
 )
 from .metrics import observe
-from .viewer import (
+from .ui import (
     DEFAULT_LEVEL,
     LEVEL_OPTIONS,
     TABLE_COLUMNS,

@@ -21,6 +21,14 @@ if TYPE_CHECKING:
 
 @pytest.fixture
 def ctx() -> Generator[nu.Context, None, None]:
-    """A fresh in-memory Context bound to a nulog store (per-test isolation)."""
+    """A fresh in-memory Context bound to a nulog store (per-test isolation).
+
+    Binds both the ``Navigator`` (nu.v: persistent messages + metrics) and
+    a plain ``dict`` (nu.m: transient viewer state).
+    """
     with nu.v.presets.memory_storage() as storage:
-        yield nu.Context().bind(Navigator, Navigator(storage))
+        yield (
+            nu.Context()
+            .bind(Navigator, Navigator(storage))
+            .bind(dict, {})
+        )

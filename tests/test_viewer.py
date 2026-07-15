@@ -10,17 +10,16 @@ pytest.importorskip("nudle")
 import nu
 
 import nulog
-from nulog.viewer import (
+from nulog.ui import (
     DEFAULT_LEVEL,
     LEVEL_OPTIONS,
     TABLE_COLUMNS,
     ViewerIndex,
     ViewerPage,
     ViewState,
-    _repaint,
-    _table_payload,
     build_ui,
 )
+from nulog.ui.query import _repaint, _table_payload
 
 
 def test_page_has_all_viewer_refs():
@@ -58,11 +57,9 @@ def test_repaint_reads_current_stream(ctx, level_filter):
         ctx,
     )
     nu.run(
-        nu.v.Transaction(
-            ViewState.stream.store("app")
-            >> ViewState.level.store(level_filter)
-            >> ViewState.search.store(""),
-        ),
+        ViewState.stream.store("app")
+        >> ViewState.level.store(level_filter)
+        >> ViewState.search.store(""),
         ctx,
     )
     payload = nu.run(nu.v.Snapshot(_table_payload()), ctx)[0]
