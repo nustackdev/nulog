@@ -11,15 +11,27 @@ import nu
 
 import nulog
 from nulog.ui import (
+    DEFAULT_COUNT,
     DEFAULT_LEVEL,
+    DEFAULT_MODE,
     DEFAULT_WINDOW,
     LEVEL_OPTIONS,
+    MAX_COUNT,
+    MIN_COUNT,
+    MODE_OPTIONS,
+    MODE_TAIL,
+    MODE_TAKE,
     SAMPLE_LIMIT,
     TABLE_COLUMNS,
     WINDOW_OPTIONS,
+    CountField,
+    FilterField,
+    LevelField,
     MessagesBody,
     MetricsBody,
     MetricsViewState,
+    ModeField,
+    StreamField,
     ViewerIndex,
     ViewerPage,
     ViewerTabs,
@@ -38,16 +50,14 @@ def test_page_declares_heading_and_tabs():
         assert name in slots
 
 
-def test_messages_body_has_expected_refs():
+def test_messages_body_holds_filters_and_table():
     slots = MessagesBody._slots
-    for name in ("stream", "level", "search", "table"):
-        assert name in slots
+    assert set(slots) == {"filters", "table"}
 
 
-def test_metrics_body_has_expected_refs():
+def test_metrics_body_holds_pickers_and_chart():
     slots = MetricsBody._slots
-    for name in ("series", "window", "chart"):
-        assert name in slots
+    assert set(slots) == {"pickers", "chart"}
 
 
 def test_viewer_tabs_covers_both_bodies():
@@ -58,8 +68,26 @@ def test_index_registers_one_page():
     assert ViewerIndex.pages.routes["/"] is ViewerPage
 
 
+def test_labeled_fields_carry_labels():
+    """Each :class:`nu.ui.FieldRef` subclass sets a visible label."""
+    assert StreamField.label == "stream"
+    assert ModeField.label == "mode"
+    assert CountField.label == "count"
+    assert LevelField.label == "level"
+    assert FilterField.label == "filter"
+
+
 def test_level_options_include_all_severities():
     assert set(LEVEL_OPTIONS) == {DEFAULT_LEVEL, "debug", "info", "warning", "error", "critical"}
+
+
+def test_mode_options_cover_tail_and_take():
+    assert {opt["value"] for opt in MODE_OPTIONS} == {MODE_TAIL, MODE_TAKE}
+    assert DEFAULT_MODE in {MODE_TAIL, MODE_TAKE}
+
+
+def test_count_defaults_within_bounds():
+    assert MIN_COUNT <= DEFAULT_COUNT <= MAX_COUNT
 
 
 def test_window_options_default_is_valid():
@@ -79,29 +107,109 @@ def test_build_ui_returns_nu():
     assert isinstance(tree, nu.Nu)
 
 
-@pytest.mark.parametrize("level_filter", [DEFAULT_LEVEL, "error"])
-def test_messages_repaint_reads_current_stream(ctx, level_filter):
-    """After seeding ViewState, the messages repaint's payload reflects the store."""
-    app = nulog.getLogger("app")
+def _seed_messages_state(
+    ctx,
+    *,
+    stream: str = "app",
+    mode: str = DEFAULT_MODE,
+    count: int = DEFAULT_COUNT,
+    level: str = DEFAULT_LEVEL,
+    filter_: str = "",
+) -> None:
+    """Convenience: seed ViewState for a messages-tab read test."""
+    nu.run(
+        ViewState.stream.store(stream)
+        >> ViewState.mode.store(mode)
+        >> ViewState.count.store(count)
+        >> ViewState.level.store(level)
+        >> ViewState.filter.store(filter_),
+        ctx,
+    )
+
+
+def _seed_stream_of_five(ctx) -> None:
+    """Seed 5 messages into stream ``app``, distinguishable by their msg."""
+    log = nulog.getLogger("app")
     nu.run(
         nu.v.Transaction(
-            app.info("hi", extra={"n": 1})
-            >> app.error("boom", extra={"code": 500}),
+            log.info("one")
+            >> log.info("two")
+            >> log.info("three")
+            >> log.info("four")
+            >> log.info("five"),
         ),
         ctx,
     )
+
+
+def test_messages_tail_returns_newest_first(ctx):
+    """``tail`` mode reads ``entries[len-count:len]`` reversed."""
+    _seed_stream_of_five(ctx)
+    _seed_messages_state(ctx, mode=MODE_TAIL, count=3)
+    payload = nu.run(nu.v.Snapshot(_table_payload()), ctx)[0]
+    msgs = [row[2] for row in payload["rows"]]
+    assert msgs == ["five", "four", "three"]
+
+
+def test_messages_take_returns_oldest_first(ctx):
+    """``take`` mode reads ``entries[0:count]`` in order."""
+    _seed_stream_of_five(ctx)
+    _seed_messages_state(ctx, mode=MODE_TAKE, count=3)
+    payload = nu.run(nu.v.Snapshot(_table_payload()), ctx)[0]
+    msgs = [row[2] for row in payload["rows"]]
+    assert msgs == ["one", "two", "three"]
+
+
+def test_messages_count_beyond_length_returns_all(ctx):
+    """Count > len(stream) is clamped by the slice math to whatever exists."""
+    _seed_stream_of_five(ctx)
+    _seed_messages_state(ctx, mode=MODE_TAIL, count=100)
+    payload = nu.run(nu.v.Snapshot(_table_payload()), ctx)[0]
+    assert len(payload["rows"]) == 5
+
+
+def test_messages_count_zero_is_clamped_to_min(ctx):
+    """``SafeCount`` bumps a zero (or negative) count to ``MIN_COUNT``."""
+    _seed_stream_of_five(ctx)
+    _seed_messages_state(ctx, mode=MODE_TAIL, count=0)
+    payload = nu.run(nu.v.Snapshot(_table_payload()), ctx)[0]
+    assert len(payload["rows"]) == MIN_COUNT
+
+
+def test_messages_filter_narrows_within_window(ctx):
+    """The substring filter applies inside the current slice, not across the stream."""
+    _seed_stream_of_five(ctx)
+    _seed_messages_state(ctx, mode=MODE_TAIL, count=3, filter_="four")
+    payload = nu.run(nu.v.Snapshot(_table_payload()), ctx)[0]
+    msgs = [row[2] for row in payload["rows"]]
+    assert msgs == ["four"]
+
+
+def test_messages_filter_outside_window_yields_nothing(ctx):
+    """A match that lives outside the count window does not surface."""
+    _seed_stream_of_five(ctx)
+    # tail(2) window is ["five", "four"] -- "one" is out of scope.
+    _seed_messages_state(ctx, mode=MODE_TAIL, count=2, filter_="one")
+    payload = nu.run(nu.v.Snapshot(_table_payload()), ctx)[0]
+    assert payload["rows"] == []
+
+
+@pytest.mark.parametrize("level_filter", [DEFAULT_LEVEL, "error"])
+def test_messages_level_filter(ctx, level_filter):
+    """Level filter reduces the window to matching entries; ``all`` passes through."""
+    log = nulog.getLogger("app")
     nu.run(
-        ViewState.stream.store("app")
-        >> ViewState.level.store(level_filter)
-        >> ViewState.search.store(""),
+        nu.v.Transaction(
+            log.info("hi", extra={"n": 1})
+            >> log.error("boom", extra={"code": 500}),
+        ),
         ctx,
     )
+    _seed_messages_state(ctx, level=level_filter)
     payload = nu.run(nu.v.Snapshot(_table_payload()), ctx)[0]
     assert payload["columns"] == list(TABLE_COLUMNS)
     if level_filter == "error":
-        assert len(payload["rows"]) == 1
-        assert payload["rows"][0][1] == "error"
-        assert payload["rows"][0][2] == "boom"
+        assert [row[1] for row in payload["rows"]] == ["error"]
     else:
         assert len(payload["rows"]) == 2
 

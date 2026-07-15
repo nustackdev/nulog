@@ -1,10 +1,16 @@
-"""Messages tab reads -- tail-window scan + filter predicates + table payload.
+"""Messages tab reads -- bounded slice + in-window predicates + table payload.
 
 The tick calls :func:`_repaint`; that returns a Nu store command whose
-payload is the current filtered slice of the selected stream. Only the
-last :data:`~.shape.TAIL_LIMIT` entries are read (``len -> slice ->
-reverse``), so cost is O(TAIL_LIMIT) independent of stream size --
-billion-entry safe.
+payload is the current filtered slice of the selected stream. The slice
+is either:
+
+- ``tail`` -- ``entries[len - count : len]`` reversed (newest first)
+- ``take`` -- ``entries[0 : count]`` in natural order (oldest first)
+
+Both are ``len()`` + one ``SliceQuery`` descent, so read cost is O(count)
+regardless of stream size -- billion-entry safe. Level and substring
+predicates only see the ``count`` entries in the slice, never the full
+stream, so they can't degrade to a scan.
 
 Also home to the value-only ``@nu.host`` formatting seams -- :data:`FmtTs`,
 :data:`FmtFields`, :data:`RowAsList` -- pure functions, no ctx.
@@ -18,7 +24,15 @@ import json
 import nu
 
 from ..messages.shape import Messages
-from .shape import DEFAULT_LEVEL, TABLE_COLUMNS, TAIL_LIMIT, MessagesBody, ViewState
+from .shape import (
+    DEFAULT_LEVEL,
+    MAX_COUNT,
+    MIN_COUNT,
+    MODE_TAIL,
+    TABLE_COLUMNS,
+    MessagesBody,
+    ViewState,
+)
 
 
 __all__ = [
@@ -65,11 +79,44 @@ def RowAsList(time: str, level: str, msg: str, fields: str) -> list:  # noqa: N8
     return [time, level, msg, fields]
 
 
+# ---- @nu.host: safe-count clamp ------------------------------------------
+
+
+@nu.host
+def SafeCount(count: int) -> int:  # noqa: N802
+    """Clamp count into ``[MIN_COUNT, MAX_COUNT]`` -- defense in depth.
+
+    Browser side, ``NumberInputRef`` enforces the same range, but the
+    server never trusts that. A stray zero, negative, or big number here
+    would either return nothing or blow a repaint budget; clamp instead.
+    """
+    if not isinstance(count, int):
+        count = int(count) if count else MIN_COUNT
+    if count < MIN_COUNT:
+        return MIN_COUNT
+    if count > MAX_COUNT:
+        return MAX_COUNT
+    return count
+
+
+@nu.host
+def MaybeReverse(rows: list, reverse: bool) -> list:  # noqa: N802
+    """Reverse the collected rows iff ``reverse`` is truthy.
+
+    Order flip runs on the already-bounded ``list[row]``, not on any live
+    entry stream: cost is O(count). We use this rather than a stream-side
+    :class:`nu.ReversedQuery` inside an :class:`nu.IfQuery`, because
+    IfQuery's branches must share a kind (scalar or stream) and this way
+    we keep the whole pre-collect pipeline scalar-safe.
+    """
+    return list(reversed(rows)) if reverse else rows
+
+
 # ---- table builders ------------------------------------------------------
 #
-# The tail slice is materialized into a list of shape views; we iterate it
-# newest-first via ReversedQuery and bind each entry view to _nl_item, then
-# apply the current ViewState-driven predicates.
+# The bounded slice materializes into a list of shape views; we bind each
+# entry view to _nl_item and apply the ViewState-driven predicates. Slice
+# math never touches the full stream -- only ``len()`` + one descent.
 
 _ITEM = nu.AnyAttrRef("_nl_item")
 _TS_US = nu.GetItemQuery(_ITEM, "ts_us")
@@ -78,17 +125,38 @@ _MSG = nu.GetItemQuery(_ITEM, "msg")
 _FIELDS_STR = nu.GetItemQuery(_ITEM, "fields")
 
 
-def _tail_window() -> nu.Nu:
-    """Newest-first entry-view stream for the current ``ViewState.stream``.
+def _window() -> nu.Nu:
+    """Forward entry-view stream for the current ``ViewState`` slice.
 
-    Reads only the last ``TAIL_LIMIT`` entries: ``len -> slice[len-N:len]
-    -> reverse``. Safe at trillion-entry scale.
+    Cost: ``O(count)`` -- one ``len()``, one slice descent, no per-entry
+    walk over anything outside the slice. Safe at trillion-entry scale.
+
+        mode == "tail":  entries[max(0, len - count) : len]
+        mode == "take":  entries[0 : min(count, len)]
+
+    Yields items in the slice's natural (oldest-first) order. Tail's
+    newest-first flip happens at the final row-list stage via
+    :func:`MaybeReverse` -- see :func:`_table_rows`.
     """
     entries = Messages.streams[ViewState.stream].entries
     length = entries.len()
-    start = nu.IfQuery(nu.GeQuery(length, TAIL_LIMIT), length - TAIL_LIMIT, nu.LiteralQuery(0))
-    window = nu.GetItemQuery(entries, nu.SliceQuery(start, length, 1))
-    return nu.IterQuery(nu.ReversedQuery(window))
+    count = SafeCount(ViewState.count)
+    is_tail = nu.EqQuery(ViewState.mode, MODE_TAIL)
+
+    # tail bounds: [max(0, len - count) : len]
+    tail_start = nu.IfQuery(
+        nu.GeQuery(length, count),
+        nu.SubQuery(length, count),
+        nu.LiteralQuery(0),
+    )
+    # take stop: min(count, len)
+    take_stop = nu.IfQuery(nu.GeQuery(count, length), length, count)
+
+    start = nu.IfQuery(is_tail, tail_start, nu.LiteralQuery(0))
+    stop = nu.IfQuery(is_tail, length, take_stop)
+
+    forward = nu.GetItemQuery(entries, nu.SliceQuery(start, stop, 1))
+    return nu.IterQuery(forward)
 
 
 def _matches_level() -> nu.Nu:
@@ -99,23 +167,29 @@ def _matches_level() -> nu.Nu:
     )
 
 
-def _matches_search() -> nu.Nu:
-    """True iff the current entry's msg contains ``ViewState.search`` (or empty)."""
+def _matches_filter() -> nu.Nu:
+    """True iff the current entry's msg contains ``ViewState.filter`` (or empty)."""
     return nu.OrQuery(
-        nu.EqQuery(ViewState.search, ""),
-        nu.ContainsQuery(_MSG, ViewState.search),
+        nu.EqQuery(ViewState.filter, ""),
+        nu.ContainsQuery(_MSG, ViewState.filter),
     )
 
 
 def _table_rows() -> nu.Nu:
-    """Newest-first rows for the current ViewState filter, capped at ``TAIL_LIMIT``."""
+    """Rows for the current slice, level + filter applied in-window.
+
+    Tail mode gets its newest-first order by reversing the already-bounded
+    row list here (see :func:`MaybeReverse`) rather than reversing the
+    entry stream mid-pipeline.
+    """
     kept = nu.FilterQuery(
-        _tail_window(),
-        nu.AndQuery(_matches_level(), _matches_search()),
+        _window(),
+        nu.AndQuery(_matches_level(), _matches_filter()),
         key="_nl_item",
     )
     row = RowAsList(FmtTs(_TS_US), _LEVEL, _MSG, FmtFields(_FIELDS_STR))
-    return nu.CollectQuery(nu.MapQuery(kept, row, key="_nl_item"))
+    ordered = nu.CollectQuery(nu.MapQuery(kept, row, key="_nl_item"))
+    return MaybeReverse(ordered, nu.EqQuery(ViewState.mode, MODE_TAIL))
 
 
 def _table_payload() -> nu.Nu:

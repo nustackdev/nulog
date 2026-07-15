@@ -5,9 +5,11 @@
 - stores the page title + heading,
 - seeds :class:`~.shape.ViewState` and :class:`~.shape.MetricsViewState`
   to sane defaults,
-- hydrates the static chrome for both tabs (pickers + options),
+- hydrates the chrome for both tabs (option lists, radio choices, count
+  bounds) -- labels themselves come from each :class:`~nu.ui.FieldRef`
+  subclass's ``label`` ClassVar,
 - races a live tick (repaint every :data:`~.shape.TICK_SECONDS`) against
-  reactives for each filter input (stream / level / search / series / window).
+  reactives for each filter input.
 
 Each tick repaints both the messages table and the metrics chart. The
 whole tree runs under a ``nu.Provide(dict, {}, ...)`` bracket that carries
@@ -24,17 +26,27 @@ import nu
 from . import messages as _messages
 from . import metrics as _metrics
 from .shape import (
+    DEFAULT_COUNT,
     DEFAULT_LEVEL,
+    DEFAULT_MODE,
     DEFAULT_WINDOW,
     LEVEL_OPTIONS,
+    MAX_COUNT,
+    MIN_COUNT,
+    MODE_OPTIONS,
     TICK_SECONDS,
     WINDOW_OPTIONS,
-    MessagesBody,
-    MetricsBody,
+    CountField,
+    FilterField,
+    LevelField,
     MetricsViewState,
+    ModeField,
+    SeriesField,
+    StreamField,
     ViewerIndex,
     ViewerPage,
     ViewState,
+    WindowField,
 )
 
 
@@ -51,15 +63,17 @@ def _seed_view(streams: Sequence[str], series: Sequence[str]) -> nu.Nu:
     first_series = series[0] if series else ""
     return (
         ViewState.stream.store(first_stream)
+        >> ViewState.mode.store(DEFAULT_MODE)
+        >> ViewState.count.store(DEFAULT_COUNT)
         >> ViewState.level.store(DEFAULT_LEVEL)
-        >> ViewState.search.store("")
+        >> ViewState.filter.store("")
         >> MetricsViewState.series.store(first_series)
         >> MetricsViewState.window.store(DEFAULT_WINDOW)
     )
 
 
 def _hydrate_chrome(streams: Sequence[str], series: Sequence[str]) -> nu.Nu:
-    """Seed the static page chrome: heading, tab pickers, options + values."""
+    """Seed the chrome for both tabs: options, initial values, count bounds."""
     first_stream = streams[0] if streams else ""
     first_series = series[0] if series else ""
     stream_opts = list(streams) or [first_stream]
@@ -67,22 +81,73 @@ def _hydrate_chrome(streams: Sequence[str], series: Sequence[str]) -> nu.Nu:
     return nu.v.Snapshot(
         ViewerPage.heading.set("nulog viewer", level=2)
         # messages tab
-        | MessagesBody.stream.set_options(stream_opts)
-        | MessagesBody.stream.set(first_stream)
-        | MessagesBody.level.set_options(list(LEVEL_OPTIONS))
-        | MessagesBody.level.set(DEFAULT_LEVEL)
-        | MessagesBody.search.set("")
+        | StreamField.control.set_options(stream_opts)
+        | StreamField.control.set(first_stream)
+        | ModeField.control.set_options(list(MODE_OPTIONS))
+        | ModeField.control.set(DEFAULT_MODE)
+        | CountField.control.set(
+            DEFAULT_COUNT, min=MIN_COUNT, max=MAX_COUNT, step=10,
+        )
+        | LevelField.control.set_options(list(LEVEL_OPTIONS))
+        | LevelField.control.set(DEFAULT_LEVEL)
+        | FilterField.control.set("")
         # metrics tab
-        | MetricsBody.series.set_options(series_opts)
-        | MetricsBody.series.set(first_series)
-        | MetricsBody.window.set_options(list(WINDOW_OPTIONS))
-        | MetricsBody.window.set(DEFAULT_WINDOW),
+        | SeriesField.control.set_options(series_opts)
+        | SeriesField.control.set(first_series)
+        | WindowField.control.set_options(list(WINDOW_OPTIONS))
+        | WindowField.control.set(DEFAULT_WINDOW),
     )
 
 
 def _repaint_both() -> nu.Nu:
     """One snapshot that touches both the messages table and the metrics chart."""
     return nu.v.Snapshot(_messages._repaint() | _metrics._repaint())
+
+
+def _messages_reactives() -> nu.Nu:
+    """One ``ReactForever`` per messages-tab control -- mirror + repaint."""
+    on_stream = nu.ReactForever(
+        StreamField.control.changed(),
+        ViewState.stream.store(StreamField.control)
+        >> nu.v.Snapshot(_messages._repaint()),
+    )
+    on_mode = nu.ReactForever(
+        ModeField.control.changed(),
+        ViewState.mode.store(ModeField.control)
+        >> nu.v.Snapshot(_messages._repaint()),
+    )
+    on_count = nu.ReactForever(
+        CountField.control.changed(),
+        # NumberInputRef ships a float; cast to int for the slice math.
+        ViewState.count.store(nu.IntQuery(CountField.control))
+        >> nu.v.Snapshot(_messages._repaint()),
+    )
+    on_level = nu.ReactForever(
+        LevelField.control.changed(),
+        ViewState.level.store(LevelField.control)
+        >> nu.v.Snapshot(_messages._repaint()),
+    )
+    on_filter = nu.ReactForever(
+        FilterField.control.changed(),
+        ViewState.filter.store(FilterField.control)
+        >> nu.v.Snapshot(_messages._repaint()),
+    )
+    return on_stream | on_mode | on_count | on_level | on_filter
+
+
+def _metrics_reactives() -> nu.Nu:
+    """One ``ReactForever`` per metrics-tab control -- mirror + repaint."""
+    on_series = nu.ReactForever(
+        SeriesField.control.changed(),
+        MetricsViewState.series.store(SeriesField.control)
+        >> nu.v.Snapshot(_metrics._repaint()),
+    )
+    on_window = nu.ReactForever(
+        WindowField.control.changed(),
+        MetricsViewState.window.store(WindowField.control)
+        >> nu.v.Snapshot(_metrics._repaint()),
+    )
+    return on_series | on_window
 
 
 def build_ui(streams: Sequence[str], series: Sequence[str]) -> nu.Nu:
@@ -95,35 +160,7 @@ def build_ui(streams: Sequence[str], series: Sequence[str]) -> nu.Nu:
     tick = nu.ForeverDo(
         _repaint_both() >> nu.Delay(nu.LiteralQuery(TICK_SECONDS)),
     )
-    # messages reactives
-    on_stream = nu.ReactForever(
-        MessagesBody.stream.changed(),
-        ViewState.stream.store(MessagesBody.stream)
-        >> nu.v.Snapshot(_messages._repaint()),
-    )
-    on_level = nu.ReactForever(
-        MessagesBody.level.changed(),
-        ViewState.level.store(MessagesBody.level)
-        >> nu.v.Snapshot(_messages._repaint()),
-    )
-    on_search = nu.ReactForever(
-        MessagesBody.search.changed(),
-        ViewState.search.store(MessagesBody.search)
-        >> nu.v.Snapshot(_messages._repaint()),
-    )
-    # metrics reactives
-    on_series = nu.ReactForever(
-        MetricsBody.series.changed(),
-        MetricsViewState.series.store(MetricsBody.series)
-        >> nu.v.Snapshot(_metrics._repaint()),
-    )
-    on_window = nu.ReactForever(
-        MetricsBody.window.changed(),
-        MetricsViewState.window.store(MetricsBody.window)
-        >> nu.v.Snapshot(_metrics._repaint()),
-    )
-
-    reactives = tick | on_stream | on_level | on_search | on_series | on_window
+    reactives = tick | _messages_reactives() | _metrics_reactives()
 
     return nu.Provide(
         dict,
