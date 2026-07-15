@@ -124,39 +124,42 @@ _LEVEL = nu.GetItemQuery(_ITEM, "level")
 _MSG = nu.GetItemQuery(_ITEM, "msg")
 _FIELDS_STR = nu.GetItemQuery(_ITEM, "fields")
 
+_KEY = nu.AnyAttrRef("_nl_key")
+
 
 def _window() -> nu.Nu:
     """Forward entry-view stream for the current ``ViewState`` slice.
 
-    Cost: ``O(count)`` -- one ``len()``, one slice descent, no per-entry
-    walk over anything outside the slice. Safe at trillion-entry scale.
+    Cost: O(count). ``entries`` is a :class:`LogIndexedDictView` with no
+    positional index, but its ``__keys__/`` sibling carries insertion order,
+    so a reverse-cursor scan of the last N keys is trillion-entry safe --
+    the scan itself stops at N and never walks past the tail.
 
-        mode == "tail":  entries[max(0, len - count) : len]
-        mode == "take":  entries[0 : min(count, len)]
+        mode == "tail":  reverse-scan last `count` keys, flipped oldest-first
+        mode == "take":  forward-scan first `count` keys
 
-    Yields items in the slice's natural (oldest-first) order. Tail's
-    newest-first flip happens at the final row-list stage via
-    :func:`MaybeReverse` -- see :func:`_table_rows`.
+    Yields entry views in insertion (oldest-first) order. Tail's newest-first
+    flip happens at the final row-list stage via :func:`MaybeReverse` --
+    see :func:`_table_rows`.
     """
     entries = Messages.streams[ViewState.stream].entries
-    length = entries.len()
     count = SafeCount(ViewState.count)
     is_tail = nu.EqQuery(ViewState.mode, MODE_TAIL)
 
-    # tail bounds: [max(0, len - count) : len]
-    tail_start = nu.IfQuery(
-        nu.GeQuery(length, count),
-        nu.SubQuery(length, count),
-        nu.LiteralQuery(0),
+    # tail: reverse-scan first `count` (newest-first, bounded), then flip
+    # to oldest-first so downstream keeps its insertion-order contract.
+    tail_keys = nu.CollectQuery(
+        nu.ReversedQuery(nu.std.itertools.islice(entries.reversed_keys(), count)),
     )
-    # take stop: min(count, len)
-    take_stop = nu.IfQuery(nu.GeQuery(count, length), length, count)
+    # take: forward-scan first `count` (oldest-first, bounded).
+    take_keys = nu.CollectQuery(nu.std.itertools.islice(entries.keys(), count))
 
-    start = nu.IfQuery(is_tail, tail_start, nu.LiteralQuery(0))
-    stop = nu.IfQuery(is_tail, length, take_stop)
-
-    forward = nu.GetItemQuery(entries, nu.SliceQuery(start, stop, 1))
-    return nu.IterQuery(forward)
+    keys = nu.IfQuery(is_tail, tail_keys, take_keys)
+    return nu.MapQuery(
+        nu.IterQuery(keys),
+        nu.GetItemQuery(entries, _KEY),
+        key="_nl_key",
+    )
 
 
 def _matches_level() -> nu.Nu:

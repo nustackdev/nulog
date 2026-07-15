@@ -15,6 +15,7 @@ trillion-entry scale.
 from __future__ import annotations
 
 import nu
+from virtuals._views.log_indexed_dict_view import LazyLogIndexedDictView
 
 
 __all__ = [
@@ -43,9 +44,16 @@ class LogEntry(nu.Shape):
 
 
 class MessageStream(nu.Shape):
-    """One named stream -- append-only sequence of :class:`LogEntry`."""
+    """One named stream -- append-only sequence of :class:`LogEntry`.
 
-    entries: nu.v.ShapesListRef[LogEntry]
+    Backed by :class:`LogIndexedDictView` (via ``ShapesDictRef``) rather
+    than a positional list, so parallel writers never contend on the same
+    rocksdb row -- each ``.append()`` picks its own unique log key.
+    """
+
+    entries = nu.v.ShapesDictRef.slot(
+        LogEntry, view_type=LazyLogIndexedDictView, key_type=str,
+    )
 
 
 class Messages(nu.Shape):

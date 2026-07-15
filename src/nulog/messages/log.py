@@ -30,7 +30,6 @@ import json
 import logging as _pylogging
 
 import nu
-import nu.std.time as _nu_time
 
 from .shape import Messages
 
@@ -83,7 +82,7 @@ _LEVEL_NAMES: dict[int, str] = {
 
 def _now_us() -> nu.Nu:
     """Absolute epoch microseconds -- the ``ts_us`` slot value at eval time."""
-    return _nu_time.time_ns() // 1000
+    return nu.std.time.time_ns() // 1000
 
 
 @nu.host
@@ -133,7 +132,7 @@ def _entry(
     fields_dict = nu.DictForm.of(
         **{k: nu.LiteralQuery(v) for k, v in (extra or {}).items()},
     )
-    return Messages.streams[stream].entries.append(nu.DictForm.of(
+    return Messages.streams[stream].entries.set(nu.std.uuid.uuid4().hex(), nu.DictForm.of(
         ts_us=_now_us(),
         level=level_term,
         msg=msg_term,

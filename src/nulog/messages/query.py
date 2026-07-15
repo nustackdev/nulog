@@ -1,10 +1,15 @@
-"""Log-stream reads -- three primitives, all O(n) in the size of the *result*.
-
-The message store is an append-only :class:`ShapesListRef`; the substrate
-gives us O(1) ``len()`` and O(k) slice-descent, so every read here touches
-only the entries it returns. Safe at trillion-entry scale.
+"""Log-stream reads -- three primitives.
 
 Rows: ``{"ts_us": int, "level": str, "msg": str, "fields": dict}``.
+
+The message store is a :class:`LogIndexedDictView` (multi-writer-safe append
+log). Its ``__keys__/`` sibling holds chronological order, so:
+
+- :func:`tail` uses a bounded reverse-cursor scan (``keys_reverse``) -- O(n)
+  in the *result*, safe against arbitrarily large streams.
+- :func:`slice` and :func:`point` are inherently positional; the view has no
+  positional index, so they materialize the value stream and slice it
+  client-side. O(*stream*) -- use ``tail`` when you can.
 
 Callers who want level or substring filtering do it *outside* the read
 (``[r for r in rows if r["level"] == "error"]``). No index-less full-scan
@@ -47,9 +52,21 @@ def FieldsFromJson(raw: str) -> dict:  # noqa: N802
     return obj if isinstance(obj, dict) else {}
 
 
+_KEY = nu.AnyAttrRef("_nl_key")
+
+
 def _entries(stream: str | nu.Nu) -> nu.Nu:
-    """The entries list for ``stream`` (``stream`` may be a Nu ref)."""
+    """The entries mapping for ``stream`` (``stream`` may be a Nu ref)."""
     return Messages.streams[stream].entries
+
+
+def _values_list(stream: str | nu.Nu) -> nu.Nu:
+    """Materialize entry values in insertion order.
+
+    Used only by :func:`slice` and :func:`point`, which are inherently
+    positional. Cost is O(*stream size*); prefer :func:`tail` when you can.
+    """
+    return nu.CollectQuery(nu.IterQuery(_entries(stream).values()))
 
 
 def _row() -> nu.Nu:
@@ -70,17 +87,18 @@ def _rows_of(seq: nu.Nu) -> nu.Nu:
 def tail(stream: str | nu.Nu, n: int | nu.Nu) -> nu.Nu:
     """The newest ``n`` entries of ``stream``, newest-first.
 
-    O(n) -- reads the sequence length once, slices ``[len-n : len]``, then
-    reverses the slice. Never walks the whole stream.
+    O(n) via a bounded reverse-cursor scan over ``__keys__/`` -- reads
+    exactly n keys and n entries regardless of stream size.
     """
     entries = _entries(stream)
-    length = entries.len()
-    # start = max(0, length - n); Python-style negative slicing wraps at the
-    # end of the sequence, so an unclamped ``length - n`` would silently
-    # return fewer than the available entries when ``n > len``. Clamp here.
-    start = nu.IfQuery(nu.GeQuery(length, n), length - n, nu.LiteralQuery(0))
-    window = nu.GetItemQuery(entries, nu.SliceQuery(start, length, 1))
-    return _rows_of(nu.ReversedQuery(window))
+    keys = nu.CollectQuery(nu.std.itertools.islice(entries.reversed_keys(), n))
+    return _rows_of(
+        nu.MapQuery(
+            nu.IterQuery(keys),
+            nu.GetItemQuery(entries, _KEY),
+            key="_nl_key",
+        ),
+    )
 
 
 def slice(
@@ -91,19 +109,23 @@ def slice(
 ) -> nu.Nu:
     """Positional slice of ``stream``: ``entries[start:stop:step]``, decoded.
 
-    Supports negative indices with Python semantics (``start=-100`` is
-    ``len-100``). O(``(stop-start)/step``); does not walk beyond the slice.
+    O(*stream size*): the view has no positional index, so the whole value
+    stream materializes client-side before slicing. Prefer :func:`tail` for
+    "last N" reads.
     """
-    entries = _entries(stream)
-    return _rows_of(nu.GetItemQuery(entries, nu.SliceQuery(start, stop, step)))
+    values = _values_list(stream)
+    return _rows_of(nu.GetItemQuery(values, nu.SliceQuery(start, stop, step)))
 
 
 def point(stream: str | nu.Nu, index: int | nu.Nu) -> nu.Nu:
-    """One entry at positional ``index`` in ``stream``, decoded to a row dict."""
-    entry = Messages.streams[stream].entries[index]
+    """One entry at positional ``index`` in ``stream``, decoded to a row dict.
+
+    O(*stream size*) for the same reason as :func:`slice`.
+    """
+    entry = nu.GetItemQuery(_values_list(stream), index)
     return nu.DictForm.of(
-        ts_us=entry.ts_us,
-        level=entry.level,
-        msg=entry.msg,
-        fields=FieldsFromJson(entry.fields),
+        ts_us=nu.GetItemQuery(entry, "ts_us"),
+        level=nu.GetItemQuery(entry, "level"),
+        msg=nu.GetItemQuery(entry, "msg"),
+        fields=FieldsFromJson(nu.GetItemQuery(entry, "fields")),
     )
