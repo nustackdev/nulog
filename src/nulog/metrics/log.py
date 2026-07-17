@@ -33,12 +33,15 @@ def _now_seconds() -> nu.Nu:
     return _nu_time.time()
 
 
-def observe(name: str, value: float, *, ts: float | None = None) -> nu.Nu:
+def observe(name: str, value: float | nu.Nu, *, ts: float | None = None) -> nu.Nu:
     """Append one point to metric ``name``.
 
     Args:
         name: series name (``"cpu_load"``, ``"http_latency_ms"``, ...).
-        value: the sample.
+        value: the sample. Python numbers get wrapped in ``FloatForm``; a
+            Nu expression (Ref / Query yielding a float) is cast through
+            ``FloatQuery`` so live-computed values (rates from a loop,
+            deltas over scratch counters, etc.) can be observed directly.
         ts: optional wall-clock time (seconds since epoch). When ``None``,
             key + ``ts`` are minted at eval time. Same-microsecond writes
             collide (last-write-wins).
@@ -54,10 +57,12 @@ def observe(name: str, value: float, *, ts: float | None = None) -> nu.Nu:
         key_query = nu.LiteralQuery(int(ts * 1_000_000))
         ts_query = nu.FloatForm(float(ts))
 
+    value_expr = nu.FloatQuery(value) if isinstance(value, nu.Nu) else nu.FloatForm(float(value))
+
     return (
         nu.SetCommand(key, key_query)
         >> pt.store(nu.DictForm.of(
             ts=ts_query,
-            value=nu.FloatForm(float(value)),
+            value=value_expr,
         ))
     )
