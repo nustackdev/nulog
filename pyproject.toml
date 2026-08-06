@@ -41,16 +41,17 @@ classifiers = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "nu",
-    "virtuals-py[rocksdb]",
+    "nustack-py[ui,virtuals]>=0.1.4",
+    "rdbpython>=0.2.6",
 ]
 
 [tool.uv.sources]
-nu = { path = "../nu", editable = true }
+nustack-py = { path = "../nu", editable = true }
 virtuals-py = { path = "../virtuals", editable = true }
 virtuals-binary-codec = { path = "../virtuals/lib/binary-codec", editable = true }
+rdbpython = { path = "../rdbpy", editable = true }
 kh57 = { path = "../kh57", editable = true }
-nudle = { path = "../nu/src/nu/ui/nudle", editable = true }
+nudle = { path = "../nu/src/nu/ui/web/nudle", editable = true }
 
 [project.urls]
 Homepage = "https://github.com/nustackdev/nulog"
@@ -75,13 +76,9 @@ test = [
     "pytest-asyncio>=1.2.0",
     "hypothesis>=6.0.0",
 ]
-# Browser log viewer (the nudle UI surface in src/nulog/ui)
-ui = [
-    "nudle",
-]
 # All development dependencies
 all = [
-    "nulog[dev,test,ui]",
+    "nulog[dev,test]",
 ]
 
 # ============================================================================
