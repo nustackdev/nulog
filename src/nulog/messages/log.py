@@ -19,7 +19,7 @@ under a ``nulog.store(...)`` bracket, rather than firing through Python's
 ``logging`` module. The logger *name* IS the stream name.
 
 Every ``log.info(...)`` compiles to one ``AppendCommand`` on the stream's
-entries list -- no scratch attrs, no key encoding, no SetCommand chain.
+entries list -- no scratch attrs, no key encoding, no SetCmd chain.
 The eval-time seams are ``LevelName`` / ``PercentFormat`` / ``FieldsAsJson``
 (pure formatting) and :func:`nu.std.time.time_ns` (the clock).
 """
@@ -129,10 +129,10 @@ def _entry(
     """Build the Command tree that appends one entry to ``stream``."""
     level_term = LevelName(level)
     msg_term = PercentFormat(msg, *args) if args else PercentFormat(msg)
-    fields_dict = nu.DictForm.of(
-        **{k: nu.LiteralQuery(v) for k, v in (extra or {}).items()},
+    fields_dict = nu.Dict.of(
+        **{k: nu.Literal(v) for k, v in (extra or {}).items()},
     )
-    return Messages.streams[stream].entries.set(nu.std.uuid.uuid4().hex(), nu.DictForm.of(
+    return Messages.streams[stream].entries.set_item(nu.std.uuid.uuid4().hex(), nu.Dict.of(
         ts_us=_now_us(),
         level=level_term,
         msg=msg_term,

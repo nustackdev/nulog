@@ -122,12 +122,12 @@ def test_compose_log_with_other_writes_is_atomic(ctx):
 
     nu.run(
         nu.v.Transaction(
-            Account.balance.store(100),
+            Account.balance.set(100),
             nulog.getLogger("app").info("debit", extra={"amount": 5}),
         ),
         ctx,
     )
-    bal = nu.run(nu.v.Snapshot(nu.IntForm(Account.balance)), ctx)[0]
+    bal = nu.run(nu.v.Snapshot(nu.Int(Account.balance)), ctx)[0]
     assert bal == 100
     r = _read(ctx, nulog.messages.tail("app", 1))[0]
     assert r["msg"] == "debit"
@@ -139,7 +139,7 @@ def test_loop_appends_each_iteration(ctx):
     log = nulog.getLogger("app")
     nu.run(
         nu.ForEachDo(
-            nu.IterQuery(nu.LiteralQuery([1, 2, 3, 4, 5])),
+            nu.Iter(nu.Literal([1, 2, 3, 4, 5])),
             nu.v.Transaction(log.info("tick")),
             item="_nl_i",
         ),

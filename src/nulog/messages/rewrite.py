@@ -1,7 +1,7 @@
 """Tree rewrites that swap ``nu.std.logging`` atoms for persistent ``nulog`` writes.
 
 :func:`from_std_logging` walks a Nu tree and replaces every
-``nu.std.logging.LogCommand`` with the equivalent persistent-write subtree
+``nu.std.logging.Log`` with the equivalent persistent-write subtree
 (an ``AppendCommand`` on the stream's ``entries`` list). App code stays
 written in ``nu.std.logging`` style -- ``log.info(...)`` -- and the
 *deployment* picks whether logs go to Python's ``logging`` (default -- no
@@ -31,8 +31,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, cast
 
-from nu.core import LiteralQuery
-from nu.std.logging import LogCommand
+from nu.core import Literal
+from nu.std.logging import Log
 from nu.tree import map_nodes
 
 from .log import _entry
@@ -48,25 +48,25 @@ __all__ = [
 
 
 def _literal_value(term: nu.Nu) -> object | nu.Nu:
-    """Return the Python value if ``term`` is a ``LiteralQuery``, else the term."""
-    if isinstance(term, LiteralQuery):
+    """Return the Python value if ``term`` is a ``Literal``, else the term."""
+    if isinstance(term, Literal):
         return term._payload.get("value")
     return term
 
 
 def from_std_logging(tree: nu.Nu) -> nu.Nu:
-    """Swap every ``nu.std.logging.LogCommand`` in ``tree`` for a persistent write.
+    """Swap every ``nu.std.logging.Log`` in ``tree`` for a persistent write.
 
-    Bottom-up walk. Preserves everything that isn't a ``LogCommand``: other
+    Bottom-up walk. Preserves everything that isn't a ``Log``: other
     atoms, structure, sequence, retries, brackets. The rewritten site
     expects a ``nulog.store(...)`` bracket in scope on the Context.
     """
 
     def _rewrite(node: nu.Nu) -> nu.Nu:
-        if not isinstance(node, LogCommand):
+        if not isinstance(node, Log):
             return node
 
-        # LogCommand children: [LOGGING, level, logger, msg, *args].
+        # Log children: [LOGGING, level, logger, msg, *args].
         # Slot 0 is the fabric ref -- dropped by the persistent path.
         children = cast("tuple[nu.Nu, ...]", node._children)
         level = _literal_value(children[1])

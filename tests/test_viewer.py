@@ -69,7 +69,7 @@ def test_index_registers_one_page():
 
 
 def test_labeled_fields_carry_labels():
-    """Each :class:`nu.ui.FieldRef` subclass sets a visible label."""
+    """Each :class:`nu.ui.Field` subclass sets a visible label."""
     assert StreamField.label == "stream"
     assert ModeField.label == "mode"
     assert CountField.label == "count"
@@ -118,11 +118,11 @@ def _seed_messages_state(
 ) -> None:
     """Convenience: seed ViewState for a messages-tab read test."""
     nu.run(
-        ViewState.stream.store(stream)
-        >> ViewState.mode.store(mode)
-        >> ViewState.count.store(count)
-        >> ViewState.level.store(level)
-        >> ViewState.filter.store(filter_),
+        ViewState.stream.set(stream)
+        >> ViewState.mode.set(mode)
+        >> ViewState.count.set(count)
+        >> ViewState.level.set(level)
+        >> ViewState.filter.set(filter_),
         ctx,
     )
 
@@ -225,8 +225,8 @@ def test_metrics_chart_points_are_ordered_xy_pairs(ctx):
         ctx,
     )
     nu.run(
-        MetricsViewState.series.store("cpu_load")
-        >> MetricsViewState.window.store(DEFAULT_WINDOW),
+        MetricsViewState.series.set("cpu_load")
+        >> MetricsViewState.window.set(DEFAULT_WINDOW),
         ctx,
     )
     points = nu.run(nu.v.Snapshot(_chart_points()), ctx)[0]

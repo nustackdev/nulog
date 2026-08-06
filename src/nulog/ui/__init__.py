@@ -3,7 +3,7 @@
 Split across four files:
 
 - :mod:`.shape` -- view states (:class:`ViewState`, :class:`MetricsViewState`)
-  and display shapes (labeled :class:`~nu.ui.FieldRef` wrappers,
+  and display shapes (labeled :class:`~nu.ui.Field` wrappers,
   :class:`FiltersRow` / :class:`MetricsPickers`, :class:`MessagesBody` /
   :class:`MetricsBody`, :class:`ViewerTabs`, :class:`ViewerPage`,
   :class:`ViewerIndex`) + layout constants.

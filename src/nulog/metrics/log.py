@@ -38,9 +38,9 @@ def observe(name: str, value: float | nu.Nu, *, ts: float | None = None) -> nu.N
 
     Args:
         name: series name (``"cpu_load"``, ``"http_latency_ms"``, ...).
-        value: the sample. Python numbers get wrapped in ``FloatForm``; a
+        value: the sample. Python numbers get wrapped in ``Float``; a
             Nu expression (Ref / Query yielding a float) is cast through
-            ``FloatQuery`` so live-computed values (rates from a loop,
+            ``ToFloat`` so live-computed values (rates from a loop,
             deltas over scratch counters, etc.) can be observed directly.
         ts: optional wall-clock time (seconds since epoch). When ``None``,
             key + ``ts`` are minted at eval time. Same-microsecond writes
@@ -54,14 +54,14 @@ def observe(name: str, value: float | nu.Nu, *, ts: float | None = None) -> nu.N
         key_query: nu.Nu = _now_us()
         ts_query: nu.Nu = _now_seconds()
     else:
-        key_query = nu.LiteralQuery(int(ts * 1_000_000))
-        ts_query = nu.FloatForm(float(ts))
+        key_query = nu.Literal(int(ts * 1_000_000))
+        ts_query = nu.Float(float(ts))
 
-    value_expr = nu.FloatQuery(value) if isinstance(value, nu.Nu) else nu.FloatForm(float(value))
+    value_expr = nu.ToFloat(value) if isinstance(value, nu.Nu) else nu.Float(float(value))
 
     return (
-        nu.SetCommand(key, key_query)
-        >> pt.store(nu.DictForm.of(
+        nu.SetCmd(key, key_query)
+        >> pt.set(nu.Dict.of(
             ts=ts_query,
             value=value_expr,
         ))

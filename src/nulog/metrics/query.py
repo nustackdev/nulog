@@ -22,22 +22,22 @@ __all__ = [
 
 
 _PAIR = nu.AnyAttrRef("_nl_mpair")
-_KEY = nu.GetItemQuery(_PAIR, 0)
-_VIEW = nu.GetItemQuery(_PAIR, 1)
+_KEY = nu.GetItem(_PAIR, 0)
+_VIEW = nu.GetItem(_PAIR, 1)
 
 
 def _row() -> nu.Nu:
     """One ``{ts_us, ts, value}`` row from the current metric pair."""
-    return nu.DictForm.of(
+    return nu.Dict.of(
         ts_us=_KEY,
-        ts=nu.GetItemQuery(_VIEW, "ts"),
-        value=nu.GetItemQuery(_VIEW, "value"),
+        ts=nu.GetItem(_VIEW, "ts"),
+        value=nu.GetItem(_VIEW, "value"),
     )
 
 
 def _rows(pairs: nu.Nu) -> nu.Nu:
     """Turn a ``(key, view)`` pair stream into a ``list[dict]`` row list."""
-    return nu.CollectQuery(nu.MapQuery(nu.IterQuery(pairs), _row(), key="_nl_mpair"))
+    return nu.Collect(nu.Map(nu.Iter(pairs), _row(), key="_nl_mpair"))
 
 
 def range(
@@ -72,8 +72,8 @@ def sample(
 def point(name: str, key: int | nu.Nu) -> nu.Nu:
     """One metric point in ``name`` at the exact microsecond ``key``."""
     pt = Metrics.series[name].points[key]
-    return nu.DictForm.of(
-        ts_us=nu.LiteralQuery(key) if isinstance(key, int) else key,
+    return nu.Dict.of(
+        ts_us=nu.Literal(key) if isinstance(key, int) else key,
         ts=pt.ts,
         value=pt.value,
     )

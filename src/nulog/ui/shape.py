@@ -129,26 +129,26 @@ class MetricsViewState(nu.Shape):
 
 # ---- labeled input wrappers --------------------------------------------
 #
-# One :class:`nu.ui.FieldRef` per control gives each input a visible
+# One :class:`nu.ui.Field` per control gives each input a visible
 # ``label`` above it -- the whole point of this pass. Access the wrapped
 # control via ``<Field>.control`` (e.g. ``StreamField.control.set(...)``).
 
 
-class StreamField(nu.ui.FieldRef):
+class StreamField(nu.ui.Field):
     """Stream picker."""
 
     label: ClassVar[str] = "stream"
     control = nu.ui.SelectRef.slot()
 
 
-class ModeField(nu.ui.FieldRef):
+class ModeField(nu.ui.Field):
     """Tail vs take switch (which end of the stream to read)."""
 
     label: ClassVar[str] = "mode"
     control = nu.ui.RadioGroupRef.slot()
 
 
-class CountField(nu.ui.FieldRef):
+class CountField(nu.ui.Field):
     """How many entries the mode reads."""
 
     label: ClassVar[str] = "count"
@@ -156,14 +156,14 @@ class CountField(nu.ui.FieldRef):
     control = nu.ui.NumberInputRef.slot()
 
 
-class LevelField(nu.ui.FieldRef):
+class LevelField(nu.ui.Field):
     """Level filter, applied inside the tail / take slice."""
 
     label: ClassVar[str] = "level"
     control = nu.ui.SelectRef.slot()
 
 
-class FilterField(nu.ui.FieldRef):
+class FilterField(nu.ui.Field):
     """Substring match against ``msg``. In-window only -- never a full scan."""
 
     label: ClassVar[str] = "filter"
@@ -171,14 +171,14 @@ class FilterField(nu.ui.FieldRef):
     control = nu.ui.InputRef.slot()
 
 
-class SeriesField(nu.ui.FieldRef):
+class SeriesField(nu.ui.Field):
     """Metric series picker."""
 
     label: ClassVar[str] = "series"
     control = nu.ui.SelectRef.slot()
 
 
-class WindowField(nu.ui.FieldRef):
+class WindowField(nu.ui.Field):
     """Time-window picker for the metrics chart."""
 
     label: ClassVar[str] = "window"
@@ -223,7 +223,7 @@ class MetricsBody(nu.ui.Column):
     chart = nu.ui.LineChart.slot()
 
 
-class ViewerTabs(nu.ui.TabsRef):
+class ViewerTabs(nu.ui.Tabs):
     """Two-tab strip; body slot per tab id."""
 
     tabs: ClassVar[list[dict[str, str]]] = [

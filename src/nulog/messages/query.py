@@ -34,10 +34,10 @@ __all__ = [
 
 
 _ITEM = nu.AnyAttrRef("_nl_item")
-_TS_US = nu.GetItemQuery(_ITEM, "ts_us")
-_LEVEL = nu.GetItemQuery(_ITEM, "level")
-_MSG = nu.GetItemQuery(_ITEM, "msg")
-_FIELDS_STR = nu.GetItemQuery(_ITEM, "fields")
+_TS_US = nu.GetItem(_ITEM, "ts_us")
+_LEVEL = nu.GetItem(_ITEM, "level")
+_MSG = nu.GetItem(_ITEM, "msg")
+_FIELDS_STR = nu.GetItem(_ITEM, "fields")
 
 
 @nu.host
@@ -66,12 +66,12 @@ def _values_list(stream: str | nu.Nu) -> nu.Nu:
     Used only by :func:`slice` and :func:`point`, which are inherently
     positional. Cost is O(*stream size*); prefer :func:`tail` when you can.
     """
-    return nu.CollectQuery(nu.IterQuery(_entries(stream).values()))
+    return nu.Collect(nu.Iter(_entries(stream).values()))
 
 
 def _row() -> nu.Nu:
     """One decoded row dict from the current entry view bound at ``_nl_item``."""
-    return nu.DictForm.of(
+    return nu.Dict.of(
         ts_us=_TS_US,
         level=_LEVEL,
         msg=_MSG,
@@ -81,7 +81,7 @@ def _row() -> nu.Nu:
 
 def _rows_of(seq: nu.Nu) -> nu.Nu:
     """Turn an entry-view stream into a ``list[dict]`` row list."""
-    return nu.CollectQuery(nu.MapQuery(nu.IterQuery(seq), _row(), key="_nl_item"))
+    return nu.Collect(nu.Map(nu.Iter(seq), _row(), key="_nl_item"))
 
 
 def tail(stream: str | nu.Nu, n: int | nu.Nu) -> nu.Nu:
@@ -91,11 +91,11 @@ def tail(stream: str | nu.Nu, n: int | nu.Nu) -> nu.Nu:
     exactly n keys and n entries regardless of stream size.
     """
     entries = _entries(stream)
-    keys = nu.CollectQuery(nu.std.itertools.islice(entries.reversed_keys(), n))
+    keys = nu.Collect(nu.std.itertools.islice(entries.reversed_keys(), n))
     return _rows_of(
-        nu.MapQuery(
-            nu.IterQuery(keys),
-            nu.GetItemQuery(entries, _KEY),
+        nu.Map(
+            nu.Iter(keys),
+            nu.GetItem(entries, _KEY),
             key="_nl_key",
         ),
     )
@@ -114,7 +114,7 @@ def slice(
     "last N" reads.
     """
     values = _values_list(stream)
-    return _rows_of(nu.GetItemQuery(values, nu.SliceQuery(start, stop, step)))
+    return _rows_of(nu.GetItem(values, nu.Slice(start, stop, step)))
 
 
 def point(stream: str | nu.Nu, index: int | nu.Nu) -> nu.Nu:
@@ -122,10 +122,10 @@ def point(stream: str | nu.Nu, index: int | nu.Nu) -> nu.Nu:
 
     O(*stream size*) for the same reason as :func:`slice`.
     """
-    entry = nu.GetItemQuery(_values_list(stream), index)
-    return nu.DictForm.of(
-        ts_us=nu.GetItemQuery(entry, "ts_us"),
-        level=nu.GetItemQuery(entry, "level"),
-        msg=nu.GetItemQuery(entry, "msg"),
-        fields=FieldsFromJson(nu.GetItemQuery(entry, "fields")),
+    entry = nu.GetItem(_values_list(stream), index)
+    return nu.Dict.of(
+        ts_us=nu.GetItem(entry, "ts_us"),
+        level=nu.GetItem(entry, "level"),
+        msg=nu.GetItem(entry, "msg"),
+        fields=FieldsFromJson(nu.GetItem(entry, "fields")),
     )

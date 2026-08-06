@@ -96,7 +96,7 @@ def test_loop_mints_fresh_metric_key(ctx):
     """A metric write inside a loop mints a fresh kh57 key per iteration."""
     nu.run(
         nu.ForEachDo(
-            nu.IterQuery(nu.LiteralQuery([1, 2, 3, 4])),
+            nu.Iter(nu.Literal([1, 2, 3, 4])),
             nu.v.Transaction(nulog.observe("hb", 1.0)),
             item="_nl_i",
         ),

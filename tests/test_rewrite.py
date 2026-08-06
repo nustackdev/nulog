@@ -1,7 +1,7 @@
-"""``nulog.from_std_logging(tree)`` rewrites ``nu.std.logging.LogCommand`` into persistent writes.
+"""``nulog.from_std_logging(tree)`` rewrites ``nu.std.logging.Log`` into persistent writes.
 
 App code writes ``log.info(...)`` / ``log.warning(...)`` via ``nu.std.logging``;
-wrapping the tree in :func:`nulog.from_std_logging` swaps every ``LogCommand``
+wrapping the tree in :func:`nulog.from_std_logging` swaps every ``Log``
 for the equivalent ``nulog`` persistent-write subtree. After that rewrite the
 tree compiles and runs like any other Nu tree -- log records land in the
 per-stream ``entries`` list under a ``nulog.store(...)`` bracket, no Python
@@ -26,7 +26,7 @@ def _read(ctx, atom):
     return nu.run(nu.v.Snapshot(atom), ctx)[0]
 
 
-# ---- structural: LogCommand nodes get swapped ------------------------------
+# ---- structural: Log nodes get swapped ------------------------------
 
 
 def test_rewrite_returns_a_tree_without_logcommand_nodes():
@@ -35,9 +35,9 @@ def test_rewrite_returns_a_tree_without_logcommand_nodes():
 
     rewritten = nulog.from_std_logging(body)
 
-    # No LogCommand survives; the rewrite is total.
+    # No Log survives; the rewrite is total.
     def _has_logcommand(node):
-        if isinstance(node, nu_logging.LogCommand):
+        if isinstance(node, nu_logging.Log):
             return True
         return any(_has_logcommand(c) for c in getattr(node, "_children", ()))
 
@@ -132,11 +132,11 @@ def test_rewritten_stays_atomic_inside_a_transaction(ctx):
         balance = nu.v.IntRef.slot()
 
     log = nu_logging.getLogger("app")
-    body = Account.balance.store(100) >> log.info("debit", extra={"amount": 5})
+    body = Account.balance.set(100) >> log.info("debit", extra={"amount": 5})
 
     nu.run(nu.v.Transaction(nulog.from_std_logging(body)), ctx)
 
-    bal = nu.run(nu.v.Snapshot(nu.IntForm(Account.balance)), ctx)[0]
+    bal = nu.run(nu.v.Snapshot(nu.Int(Account.balance)), ctx)[0]
     assert bal == 100
     r = _read(ctx, nulog.messages.tail("app", 1))[0]
     assert r["msg"] == "debit"

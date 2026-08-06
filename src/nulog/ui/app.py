@@ -6,7 +6,7 @@
 - seeds :class:`~.shape.ViewState` and :class:`~.shape.MetricsViewState`
   to sane defaults,
 - hydrates the chrome for both tabs (option lists, radio choices, count
-  bounds) -- labels themselves come from each :class:`~nu.ui.FieldRef`
+  bounds) -- labels themselves come from each :class:`~nu.ui.Field`
   subclass's ``label`` ClassVar,
 - races a live tick (repaint every :data:`~.shape.TICK_SECONDS`) against
   reactives for each filter input.
@@ -61,11 +61,11 @@ def _seed_messages(streams: Sequence[str]) -> nu.Nu:
     """Seed the messages ViewState to defaults (first stream, tail mode)."""
     first_stream = streams[0] if streams else ""
     return (
-        ViewState.stream.store(first_stream)
-        >> ViewState.mode.store(DEFAULT_MODE)
-        >> ViewState.count.store(DEFAULT_COUNT)
-        >> ViewState.level.store(DEFAULT_LEVEL)
-        >> ViewState.filter.store("")
+        ViewState.stream.set(first_stream)
+        >> ViewState.mode.set(DEFAULT_MODE)
+        >> ViewState.count.set(DEFAULT_COUNT)
+        >> ViewState.level.set(DEFAULT_LEVEL)
+        >> ViewState.filter.set("")
     )
 
 
@@ -73,8 +73,8 @@ def _seed_metrics(series: Sequence[str]) -> nu.Nu:
     """Seed the metrics ViewState to defaults (first series, default window)."""
     first_series = series[0] if series else ""
     return (
-        MetricsViewState.series.store(first_series)
-        >> MetricsViewState.window.store(DEFAULT_WINDOW)
+        MetricsViewState.series.set(first_series)
+        >> MetricsViewState.window.set(DEFAULT_WINDOW)
     )
 
 
@@ -112,28 +112,28 @@ def _messages_reactives() -> nu.Nu:
     """One ``ReactForever`` per messages-tab control -- mirror + repaint."""
     on_stream = nu.ReactForever(
         StreamField.control.changed(),
-        ViewState.stream.store(StreamField.control)
+        ViewState.stream.set(StreamField.control)
         >> _messages._repaint(),
     )
     on_mode = nu.ReactForever(
         ModeField.control.changed(),
-        ViewState.mode.store(ModeField.control)
+        ViewState.mode.set(ModeField.control)
         >> _messages._repaint(),
     )
     on_count = nu.ReactForever(
         CountField.control.changed(),
         # NumberInputRef ships a float; cast to int for the slice math.
-        ViewState.count.store(nu.IntQuery(CountField.control))
+        ViewState.count.set(nu.ToInt(CountField.control))
         >> _messages._repaint(),
     )
     on_level = nu.ReactForever(
         LevelField.control.changed(),
-        ViewState.level.store(LevelField.control)
+        ViewState.level.set(LevelField.control)
         >> _messages._repaint(),
     )
     on_filter = nu.ReactForever(
         FilterField.control.changed(),
-        ViewState.filter.store(FilterField.control)
+        ViewState.filter.set(FilterField.control)
         >> _messages._repaint(),
     )
     return on_stream | on_mode | on_count | on_level | on_filter
@@ -143,12 +143,12 @@ def _metrics_reactives() -> nu.Nu:
     """One ``ReactForever`` per metrics-tab control -- mirror + repaint."""
     on_series = nu.ReactForever(
         SeriesField.control.changed(),
-        MetricsViewState.series.store(SeriesField.control)
+        MetricsViewState.series.set(SeriesField.control)
         >> _metrics._repaint(),
     )
     on_window = nu.ReactForever(
         WindowField.control.changed(),
-        MetricsViewState.window.store(WindowField.control)
+        MetricsViewState.window.set(WindowField.control)
         >> _metrics._repaint(),
     )
     return on_series | on_window
@@ -225,7 +225,7 @@ def build_ui(
     tick_body = tick_parts[0]
     for t in tick_parts[1:]:
         tick_body = tick_body | t
-    tick = nu.ForeverDo(tick_body >> nu.Delay(nu.LiteralQuery(TICK_SECONDS)))
+    tick = nu.ForeverDo(tick_body >> nu.Delay(nu.Literal(TICK_SECONDS)))
 
     reactives = tick
     for r in reactive_parts:

@@ -7,7 +7,7 @@ is either:
 - ``tail`` -- ``entries[len - count : len]`` reversed (newest first)
 - ``take`` -- ``entries[0 : count]`` in natural order (oldest first)
 
-Both are ``len()`` + one ``SliceQuery`` descent, so read cost is O(count)
+Both are ``len()`` + one ``Slice`` descent, so read cost is O(count)
 regardless of stream size -- billion-entry safe. Level and substring
 predicates only see the ``count`` entries in the slice, never the full
 stream, so they can't degrade to a scan.
@@ -105,8 +105,8 @@ def MaybeReverse(rows: list, reverse: bool) -> list:  # noqa: N802
 
     Order flip runs on the already-bounded ``list[row]``, not on any live
     entry stream: cost is O(count). We use this rather than a stream-side
-    :class:`nu.ReversedQuery` inside an :class:`nu.IfQuery`, because
-    IfQuery's branches must share a kind (scalar or stream) and this way
+    :class:`nu.Reversed` inside an :class:`nu.If`, because
+    If's branches must share a kind (scalar or stream) and this way
     we keep the whole pre-collect pipeline scalar-safe.
     """
     return list(reversed(rows)) if reverse else rows
@@ -119,10 +119,10 @@ def MaybeReverse(rows: list, reverse: bool) -> list:  # noqa: N802
 # math never touches the full stream -- only ``len()`` + one descent.
 
 _ITEM = nu.AnyAttrRef("_nl_item")
-_TS_US = nu.GetItemQuery(_ITEM, "ts_us")
-_LEVEL = nu.GetItemQuery(_ITEM, "level")
-_MSG = nu.GetItemQuery(_ITEM, "msg")
-_FIELDS_STR = nu.GetItemQuery(_ITEM, "fields")
+_TS_US = nu.GetItem(_ITEM, "ts_us")
+_LEVEL = nu.GetItem(_ITEM, "level")
+_MSG = nu.GetItem(_ITEM, "msg")
+_FIELDS_STR = nu.GetItem(_ITEM, "fields")
 
 _KEY = nu.AnyAttrRef("_nl_key")
 
@@ -144,37 +144,37 @@ def _window() -> nu.Nu:
     """
     entries = Messages.streams[ViewState.stream].entries
     count = SafeCount(ViewState.count)
-    is_tail = nu.EqQuery(ViewState.mode, MODE_TAIL)
+    is_tail = nu.Eq(ViewState.mode, MODE_TAIL)
 
     # tail: reverse-scan first `count` (newest-first, bounded), then flip
     # to oldest-first so downstream keeps its insertion-order contract.
-    tail_keys = nu.CollectQuery(
-        nu.ReversedQuery(nu.std.itertools.islice(entries.reversed_keys(), count)),
+    tail_keys = nu.Collect(
+        nu.Reversed(nu.std.itertools.islice(entries.reversed_keys(), count)),
     )
     # take: forward-scan first `count` (oldest-first, bounded).
-    take_keys = nu.CollectQuery(nu.std.itertools.islice(entries.keys(), count))
+    take_keys = nu.Collect(nu.std.itertools.islice(entries.keys(), count))
 
-    keys = nu.IfQuery(is_tail, tail_keys, take_keys)
-    return nu.MapQuery(
-        nu.IterQuery(keys),
-        nu.GetItemQuery(entries, _KEY),
+    keys = nu.If(is_tail, tail_keys, take_keys)
+    return nu.Map(
+        nu.Iter(keys),
+        nu.GetItem(entries, _KEY),
         key="_nl_key",
     )
 
 
 def _matches_level() -> nu.Nu:
     """True iff the current entry's level matches ``ViewState.level`` (or ``"all"``)."""
-    return nu.OrQuery(
-        nu.EqQuery(ViewState.level, DEFAULT_LEVEL),
-        nu.EqQuery(_LEVEL, ViewState.level),
+    return nu.Or(
+        nu.Eq(ViewState.level, DEFAULT_LEVEL),
+        nu.Eq(_LEVEL, ViewState.level),
     )
 
 
 def _matches_filter() -> nu.Nu:
     """True iff the current entry's msg contains ``ViewState.filter`` (or empty)."""
-    return nu.OrQuery(
-        nu.EqQuery(ViewState.filter, ""),
-        nu.ContainsQuery(_MSG, ViewState.filter),
+    return nu.Or(
+        nu.Eq(ViewState.filter, ""),
+        nu.Contains(_MSG, ViewState.filter),
     )
 
 
@@ -185,19 +185,19 @@ def _table_rows() -> nu.Nu:
     row list here (see :func:`MaybeReverse`) rather than reversing the
     entry stream mid-pipeline.
     """
-    kept = nu.FilterQuery(
+    kept = nu.Filter(
         _window(),
-        nu.AndQuery(_matches_level(), _matches_filter()),
+        nu.And(_matches_level(), _matches_filter()),
         key="_nl_item",
     )
     row = RowAsList(FmtTs(_TS_US), _LEVEL, _MSG, FmtFields(_FIELDS_STR))
-    ordered = nu.CollectQuery(nu.MapQuery(kept, row, key="_nl_item"))
-    return MaybeReverse(ordered, nu.EqQuery(ViewState.mode, MODE_TAIL))
+    ordered = nu.Collect(nu.Map(kept, row, key="_nl_item"))
+    return MaybeReverse(ordered, nu.Eq(ViewState.mode, MODE_TAIL))
 
 
 def _table_payload() -> nu.Nu:
     """The ``{columns, rows}`` dict payload the TableRef's ``.set(...)`` expects."""
-    return nu.DictForm.of(columns=list(TABLE_COLUMNS), rows=_table_rows())
+    return nu.Dict.of(columns=list(TABLE_COLUMNS), rows=_table_rows())
 
 
 def _repaint() -> nu.Nu:

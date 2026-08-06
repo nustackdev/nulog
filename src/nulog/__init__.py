@@ -87,7 +87,7 @@ from .ui import (
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from nu.context.fabric import Provide
+    from nu.context import Provide
 
 
 __version__ = "0.7.0"
@@ -170,4 +170,4 @@ def ui(
     """
     tree = build_ui(tuple(streams), tuple(series))
     tree = nu.v.auto_flow_atomic(tree)
-    return nu.nd.presets.server(tree, host=host, port=port)
+    return nu.ui.nudle.server(tree, host=host, port=port)
