@@ -47,3 +47,6 @@ _playground/
 Claude.md
 repomix*
 uv.lock
+
+.idea/
+.vscode/
