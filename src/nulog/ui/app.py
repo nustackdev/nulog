@@ -30,12 +30,7 @@ from .shape import (
     DEFAULT_LEVEL,
     DEFAULT_MODE,
     DEFAULT_WINDOW,
-    LEVEL_OPTIONS,
-    MAX_COUNT,
-    MIN_COUNT,
-    MODE_OPTIONS,
     TICK_SECONDS,
-    WINDOW_OPTIONS,
     CountField,
     FilterField,
     LevelField,
@@ -79,32 +74,29 @@ def _seed_metrics(series: Sequence[str]) -> nu.Nu:
 
 
 def _hydrate_messages_chrome(streams: Sequence[str]) -> nu.Nu:
-    """Seed the messages tab chrome: options, initial values, count bounds."""
+    """Feed the stream picker its dynamic option list + initial selection.
+
+    All other chrome (mode / count / level / filter) is pinned at slot time
+    in ``.shape`` -- see ``ModeField.control``, ``CountField.control``, ...
+    """
     first_stream = streams[0] if streams else ""
     stream_opts = list(streams) or [first_stream]
     return (
         StreamField.control.set_options(stream_opts)
         | StreamField.control.set(first_stream)
-        | ModeField.control.set_options(list(MODE_OPTIONS))
-        | ModeField.control.set(DEFAULT_MODE)
-        | CountField.control.set(
-            DEFAULT_COUNT, min=MIN_COUNT, max=MAX_COUNT, step=10,
-        )
-        | LevelField.control.set_options(list(LEVEL_OPTIONS))
-        | LevelField.control.set(DEFAULT_LEVEL)
-        | FilterField.control.set("")
     )
 
 
 def _hydrate_metrics_chrome(series: Sequence[str]) -> nu.Nu:
-    """Seed the metrics tab chrome: series options + window picker."""
+    """Feed the series picker its dynamic option list + initial selection.
+
+    Window options + default are pinned at slot time on ``WindowField.control``.
+    """
     first_series = series[0] if series else ""
     series_opts = list(series) or [first_series]
     return (
         SeriesField.control.set_options(series_opts)
         | SeriesField.control.set(first_series)
-        | WindowField.control.set_options(list(WINDOW_OPTIONS))
-        | WindowField.control.set(DEFAULT_WINDOW)
     )
 
 

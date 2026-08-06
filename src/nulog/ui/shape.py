@@ -22,8 +22,6 @@ Neither survives a restart. Log data itself sits under the enclosing
 
 from __future__ import annotations
 
-from typing import ClassVar
-
 import nu
 
 from ..messages.shape import LEVELS
@@ -135,54 +133,59 @@ class MetricsViewState(nu.Shape):
 
 
 class StreamField(nu.ui.Field):
-    """Stream picker."""
+    """Stream picker. Options pinned dynamically from ``build_ui(streams=...)``."""
 
-    label: ClassVar[str] = "stream"
     control = nu.ui.SelectRef.slot()
 
 
 class ModeField(nu.ui.Field):
     """Tail vs take switch (which end of the stream to read)."""
 
-    label: ClassVar[str] = "mode"
-    control = nu.ui.RadioGroupRef.slot()
+    control = nu.ui.RadioGroupRef.slot(
+        options=list(MODE_OPTIONS),
+        selected=DEFAULT_MODE,
+    )
 
 
 class CountField(nu.ui.Field):
     """How many entries the mode reads."""
 
-    label: ClassVar[str] = "count"
-    help: ClassVar[str] = f"{MIN_COUNT}..{MAX_COUNT} entries; slice cost is O(count)."
-    control = nu.ui.NumberInputRef.slot()
+    control = nu.ui.NumberInputRef.slot(
+        min=float(MIN_COUNT),
+        max=float(MAX_COUNT),
+        step=10.0,
+        default=float(DEFAULT_COUNT),
+    )
 
 
 class LevelField(nu.ui.Field):
     """Level filter, applied inside the tail / take slice."""
 
-    label: ClassVar[str] = "level"
-    control = nu.ui.SelectRef.slot()
+    control = nu.ui.SelectRef.slot(
+        options=list(LEVEL_OPTIONS),
+        selected=DEFAULT_LEVEL,
+    )
 
 
 class FilterField(nu.ui.Field):
     """Substring match against ``msg``. In-window only -- never a full scan."""
 
-    label: ClassVar[str] = "filter"
-    help: ClassVar[str] = "substring in message; applied within the current slice."
     control = nu.ui.InputRef.slot()
 
 
 class SeriesField(nu.ui.Field):
-    """Metric series picker."""
+    """Metric series picker. Options pinned dynamically from ``build_ui(series=...)``."""
 
-    label: ClassVar[str] = "series"
     control = nu.ui.SelectRef.slot()
 
 
 class WindowField(nu.ui.Field):
     """Time-window picker for the metrics chart."""
 
-    label: ClassVar[str] = "window"
-    control = nu.ui.SelectRef.slot()
+    control = nu.ui.SelectRef.slot(
+        options=list(WINDOW_OPTIONS),
+        selected=DEFAULT_WINDOW,
+    )
 
 
 # ---- tab bodies + tabs ref ---------------------------------------------
@@ -191,22 +194,24 @@ class WindowField(nu.ui.Field):
 class FiltersRow(nu.ui.Row):
     """Horizontal strip of labeled fields above the entries table."""
 
-    gap: ClassVar[str] = "md"
-
-    stream = StreamField.slot()
-    mode = ModeField.slot()
-    count = CountField.slot()
-    level = LevelField.slot()
-    filter = FilterField.slot()
+    stream = StreamField.slot(label="stream")
+    mode = ModeField.slot(label="mode")
+    count = CountField.slot(
+        label="count",
+        help=f"{MIN_COUNT}..{MAX_COUNT} entries; slice cost is O(count).",
+    )
+    level = LevelField.slot(label="level")
+    filter = FilterField.slot(
+        label="filter",
+        help="substring in message; applied within the current slice.",
+    )
 
 
 class MetricsPickers(nu.ui.Row):
     """Horizontal strip of labeled pickers above the chart."""
 
-    gap: ClassVar[str] = "md"
-
-    series = SeriesField.slot()
-    window = WindowField.slot()
+    series = SeriesField.slot(label="series")
+    window = WindowField.slot(label="window")
 
 
 class MessagesBody(nu.ui.Column):
@@ -226,12 +231,6 @@ class MetricsBody(nu.ui.Column):
 class ViewerTabs(nu.ui.Tabs):
     """Two-tab strip; body slot per tab id."""
 
-    tabs: ClassVar[list[dict[str, str]]] = [
-        {"id": "messages", "label": "messages"},
-        {"id": "metrics", "label": "metrics"},
-    ]
-    active: ClassVar[str] = "messages"
-
     messages = MessagesBody.slot()
     metrics = MetricsBody.slot()
 
@@ -239,11 +238,17 @@ class ViewerTabs(nu.ui.Tabs):
 # ---- page + index -------------------------------------------------------
 
 
+_TABS: tuple[dict[str, str], ...] = (
+    {"id": "messages", "label": "messages"},
+    {"id": "metrics", "label": "metrics"},
+)
+
+
 class ViewerPage(nu.ui.Page):
     """The viewer page: heading, then the two-tab strip."""
 
     heading = nu.ui.HeadingRef.slot()
-    tabs = ViewerTabs.slot()
+    tabs = ViewerTabs.slot(tabs=list(_TABS), active="messages")
 
 
 class ViewerIndex(nu.ui.Index):
