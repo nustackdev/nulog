@@ -10,7 +10,7 @@ build-backend = "setuptools.build_meta"
 # ============================================================================
 [project]
 name = "nulog"
-version = "0.1.3"
+version = "0.1.4"
 description = "Logging as a Nu app: append-only logs over any storage, written and queried in Nu."
 readme = "README.md"
 license = "Apache-2.0"
