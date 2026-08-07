@@ -45,14 +45,6 @@ dependencies = [
     "rdbpython>=0.2.6",
 ]
 
-[tool.uv.sources]
-nustack-py = { path = "../nu", editable = true }
-virtuals-py = { path = "../virtuals", editable = true }
-virtuals-binary-codec = { path = "../virtuals/lib/binary-codec", editable = true }
-rdbpython = { path = "../rdbpy", editable = true }
-kh57 = { path = "../kh57", editable = true }
-nudle = { path = "../nu/src/nu/ui/web/nudle", editable = true }
-
 [project.urls]
 Homepage = "https://github.com/nustackdev/nulog"
 Documentation = "https://github.com/nustackdev/nulog#readme"
