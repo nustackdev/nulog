@@ -1,6 +1,6 @@
 """nulog -- messages + metrics + browser viewer, all as Nu trees.
 
-Two submodules share one RocksDB (via ``nu.v``): :mod:`nulog.messages`
+Two submodules share one RocksDB (via ``nu.kv``): :mod:`nulog.messages`
 (append-only log streams on :class:`ShapesListRef`) and :mod:`nulog.metrics`
 (kh57 time series). One bracket to provide the store, one bracket to boot
 the browser viewer, one body of writes-and-reads. The write API mirrors
@@ -11,12 +11,12 @@ the browser viewer, one body of writes-and-reads. The write API mirrors
     log = nulog.getLogger("app")
 
     tree = nu.With(nulog.store(),
-        body=nu.v.Transaction(
+        body=nu.kv.Transaction(
             log.info("started", extra={"port": 8080})
             >> log.warning("slow: %s ms", 210)
             >> nulog.observe("cpu_load", 0.42),
         )
-        >> nu.v.Snapshot(nu.print(nulog.messages.tail("app", 10))),
+        >> nu.kv.Snapshot(nu.print(nulog.messages.tail("app", 10))),
     )
     nu.run(tree)
 
@@ -37,7 +37,7 @@ Live viewer::
         nulog.store("logs.db"),
         nulog.ui(["app", "scraper"], port=8080),
         body=nu.ForeverDo(
-            nu.v.Transaction(nulog.getLogger("app").info("tick")) >> nu.Delay(1.5),
+            nu.kv.Transaction(nulog.getLogger("app").info("tick")) >> nu.Delay(1.5),
         ),
     )
     asyncio.run(nu.arun(tree))
@@ -141,8 +141,8 @@ def store(path: str | None = None) -> nu.With:
     through it.
     """
     if path is None:
-        return nu.v.presets.memory_navigator()
-    return nu.v.presets.rocksdb_navigator(path)
+        return nu.kv.presets.memory_navigator()
+    return nu.kv.presets.rocksdb_navigator(path)
 
 
 def ui(
@@ -155,7 +155,7 @@ def ui(
     """Boot the nudle log viewer over the enclosing bracket's store.
 
     The viewer tree from :func:`~nulog.ui.build_ui` is scope-free; this
-    entrypoint runs an untagged ``nu.v.auto_flow_atomic`` sweep so a
+    entrypoint runs an untagged ``nu.kv.auto_flow_atomic`` sweep so a
     single-store standalone user does not have to think about atomicity.
     Callers embedding the viewer inside a multi-scope orchestration
     should call :func:`~nulog.ui.build_ui` directly and wrap themselves
@@ -169,5 +169,5 @@ def ui(
         port: uvicorn bind port (default ``8080``).
     """
     tree = build_ui(tuple(streams), tuple(series))
-    tree = nu.v.auto_flow_atomic(tree)
+    tree = nu.kv.auto_flow_atomic(tree)
     return nu.ui.nudle.server(tree, host=host, port=port)

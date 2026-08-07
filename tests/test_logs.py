@@ -17,12 +17,12 @@ import nulog
 
 def _write(ctx, cmd):
     """Run one write Command inside a Transaction on ``ctx``."""
-    nu.run(nu.v.Transaction(cmd), ctx)
+    nu.run(nu.kv.Transaction(cmd), ctx)
 
 
 def _read(ctx, atom):
     """Run a read atom under a Snapshot on ``ctx``; return the yielded value."""
-    return nu.run(nu.v.Snapshot(atom), ctx)[0]
+    return nu.run(nu.kv.Snapshot(atom), ctx)[0]
 
 
 # ---- write shape ----------------------------------------------------------
@@ -118,16 +118,16 @@ def test_compose_log_with_other_writes_is_atomic(ctx):
     """A log Command composes with any other Command inside one Transaction."""
 
     class Account(nu.Shape):
-        balance = nu.v.IntRef.slot()
+        balance = nu.kv.IntRef.slot()
 
     nu.run(
-        nu.v.Transaction(
+        nu.kv.Transaction(
             Account.balance.set(100),
             nulog.getLogger("app").info("debit", extra={"amount": 5}),
         ),
         ctx,
     )
-    bal = nu.run(nu.v.Snapshot(nu.Int(Account.balance)), ctx)[0]
+    bal = nu.run(nu.kv.Snapshot(nu.Int(Account.balance)), ctx)[0]
     assert bal == 100
     r = _read(ctx, nulog.messages.tail("app", 1))[0]
     assert r["msg"] == "debit"
@@ -140,7 +140,7 @@ def test_loop_appends_each_iteration(ctx):
     nu.run(
         nu.ForEachDo(
             nu.Iter(nu.Literal([1, 2, 3, 4, 5])),
-            nu.v.Transaction(log.info("tick")),
+            nu.kv.Transaction(log.info("tick")),
             item="_nl_i",
         ),
         ctx,
@@ -245,9 +245,9 @@ def test_bracket_form_all_in_one_tree():
     log = nulog.getLogger("app")
     tree = nu.With(
         nulog.store(),
-        body=nu.v.Transaction(
+        body=nu.kv.Transaction(
             log.info("bracketed", extra={"n": 1}) >> log.error("boom"),
         )
-        >> nu.v.Snapshot(nu.print(nulog.messages.tail("app", 10))),
+        >> nu.kv.Snapshot(nu.print(nulog.messages.tail("app", 10))),
     )
     nu.run(tree)

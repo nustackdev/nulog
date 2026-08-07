@@ -11,13 +11,13 @@ Two tabs share one :class:`ViewerPage`:
 - :class:`MetricsBody` -- series + window pickers over one kh57-sampled
   :class:`~nu.ui.LineChart`.
 
-Server-side filter state lives in :mod:`nu.m` (dict-backed, process-local):
+Server-side filter state lives in :mod:`nu.mem` (dict-backed, process-local):
 
 - :class:`ViewState` -- messages tab (stream / mode / count / level / filter).
 - :class:`MetricsViewState` -- metrics tab (series / window).
 
 Neither survives a restart. Log data itself sits under the enclosing
-:mod:`nu.v` store bracket.
+:mod:`nu.kv` store bracket.
 """
 
 from __future__ import annotations
@@ -105,24 +105,24 @@ SAMPLE_LIMIT = 500
 TICK_SECONDS = 1.0
 
 
-# ---- viewer state (nu.m -- transient, not persisted) --------------------
+# ---- viewer state (nu.mem -- transient, not persisted) --------------------
 
 
 class ViewState(nu.Shape):
     """Server-side mirror of the messages tab filter set."""
 
-    stream: nu.m.StrRef
-    mode: nu.m.StrRef        # "tail" | "take"
-    count: nu.m.IntRef       # slice size for tail / take
-    level: nu.m.StrRef       # "all" | "debug" | ... | "critical"
-    filter: nu.m.StrRef      # in-window substring match (never a full scan)
+    stream: nu.mem.StrRef
+    mode: nu.mem.StrRef        # "tail" | "take"
+    count: nu.mem.IntRef       # slice size for tail / take
+    level: nu.mem.StrRef       # "all" | "debug" | ... | "critical"
+    filter: nu.mem.StrRef      # in-window substring match (never a full scan)
 
 
 class MetricsViewState(nu.Shape):
     """Server-side mirror of the metrics tab filter (series / window)."""
 
-    series: nu.m.StrRef
-    window: nu.m.StrRef      # seconds as string, matches WINDOW_OPTIONS values
+    series: nu.mem.StrRef
+    window: nu.mem.StrRef      # seconds as string, matches WINDOW_OPTIONS values
 
 
 # ---- labeled input wrappers --------------------------------------------

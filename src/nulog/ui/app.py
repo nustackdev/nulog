@@ -14,7 +14,7 @@
 Each tick repaints both the messages table and the metrics chart. The
 whole tree runs under a ``nu.Provide(dict, {}, ...)`` bracket that carries
 the in-memory fabric for the view states -- log persistence stays under
-the enclosing :mod:`nu.v` store bracket.
+the enclosing :mod:`nu.kv` store bracket.
 """
 
 from __future__ import annotations
@@ -178,7 +178,7 @@ def build_ui(
     :class:`~nulog.messages.shape.Messages` and
     :class:`~nulog.metrics.shape.Metrics` are emitted bare so the caller
     can pick the correct atomicity scope (typically via
-    ``nu.v.auto_flow_atomic(tree, scope=Messages)`` +
+    ``nu.kv.auto_flow_atomic(tree, scope=Messages)`` +
     ``scope=Metrics``). Standalone callers get this automatically via
     the outer ``nu.arun`` default sweep against a single untagged store.
     """

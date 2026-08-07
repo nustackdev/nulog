@@ -26,17 +26,17 @@ class MetricPoint(nu.Shape):
     :class:`MetricSeries` is ``int(ts * 1_000_000)`` (microseconds).
     """
 
-    ts: nu.v.FloatRef
-    value: nu.v.FloatRef
+    ts: nu.kv.FloatRef
+    value: nu.kv.FloatRef
 
 
 class MetricSeries(nu.Shape):
     """One named time series -- kh57 int->MetricPoint map."""
 
-    points: nu.v.Kh57ShapesRef[MetricPoint]
+    points: nu.kv.Kh57ShapesRef[MetricPoint]
 
 
 class Metrics(nu.Shape):
     """The metrics store root -- every named series, keyed by name."""
 
-    series: nu.v.ShapesDictRef[str, MetricSeries]
+    series: nu.kv.ShapesDictRef[str, MetricSeries]

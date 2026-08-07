@@ -33,20 +33,20 @@ def _burst() -> nu.Nu:
 
 
 tree = nu.With(nulog.store(),
-    body=nu.v.Transaction(_burst())
-    >> nu.v.Snapshot(nu.print(
+    body=nu.kv.Transaction(_burst())
+    >> nu.kv.Snapshot(nu.print(
         "== cpu_load: range ==",
         nulog.metrics.range("cpu_load", _BEGIN, _END),
     ))
-    >> nu.v.Snapshot(nu.print(
+    >> nu.kv.Snapshot(nu.print(
         "== cpu_load: sample(5) ==",
         nulog.metrics.sample("cpu_load", 5, _BEGIN, _END),
     ))
-    >> nu.v.Snapshot(nu.print(
+    >> nu.kv.Snapshot(nu.print(
         "== http_latency_ms: sample(5) ==",
         nulog.metrics.sample("http_latency_ms", 5, _BEGIN, _END),
     ))
-    >> nu.v.Snapshot(nu.print(
+    >> nu.kv.Snapshot(nu.print(
         "== cpu_load: point(t0_us) ==",
         nulog.metrics.point("cpu_load", _BEGIN),
     )),

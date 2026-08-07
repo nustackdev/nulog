@@ -2,8 +2,8 @@
 
 The ``ctx`` fixture builds an in-memory RocksDB nulog store and binds a
 :class:`nu.Context` on it -- same shape as nu's own tests. Each test does
-its writes with ``nu.run(nu.v.Transaction(cmd), ctx)`` and its reads with
-``nu.run(nu.v.Snapshot(read_atom), ctx)[0]``.
+its writes with ``nu.run(nu.kv.Transaction(cmd), ctx)`` and its reads with
+``nu.run(nu.kv.Snapshot(read_atom), ctx)[0]``.
 """
 
 from __future__ import annotations
@@ -23,10 +23,10 @@ if TYPE_CHECKING:
 def ctx() -> Generator[nu.Context, None, None]:
     """A fresh in-memory Context bound to a nulog store (per-test isolation).
 
-    Binds both the ``Navigator`` (nu.v: persistent messages + metrics) and
-    a plain ``dict`` (nu.m: transient viewer state).
+    Binds both the ``Navigator`` (nu.kv: persistent messages + metrics) and
+    a plain ``dict`` (nu.mem: transient viewer state).
     """
-    with nu.v.presets.memory_storage() as storage:
+    with nu.kv.presets.memory_storage() as storage:
         yield (
             nu.Context()
             .bind(Navigator, Navigator(storage))

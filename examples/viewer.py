@@ -31,7 +31,7 @@ worker = nulog.getLogger("worker")
 
 def _seed() -> nu.Nu:
     """A one-shot burst so the viewer has content on first repaint."""
-    return nu.v.Transaction(
+    return nu.kv.Transaction(
         app.info("server started", extra={"port": 8080, "env": "dev"})
         >> app.debug("config loaded", extra={"source": "env"})
         >> app.warning("cache miss", extra={"key": "user:42"})
@@ -53,27 +53,27 @@ def _seed() -> nu.Nu:
 def _tick() -> nu.Nu:
     """Five-step cycle: each step emits one message and one metric point."""
     return nu.ForeverDo(
-        nu.v.Transaction(
+        nu.kv.Transaction(
             app.info("request ok", extra={"path": "/", "ms": 12})
             >> nulog.observe("cpu_load", 0.45),
         )
         >> nu.Delay(1.0)
-        >> nu.v.Transaction(
+        >> nu.kv.Transaction(
             scraper.info("page fetched", extra={"url": "/robots.txt"})
             >> nulog.observe("http_latency_ms", 22.0),
         )
         >> nu.Delay(1.0)
-        >> nu.v.Transaction(
+        >> nu.kv.Transaction(
             app.warning("slow request", extra={"ms": 210})
             >> nulog.observe("cpu_load", 0.61),
         )
         >> nu.Delay(1.0)
-        >> nu.v.Transaction(
+        >> nu.kv.Transaction(
             worker.error("stage failed", extra={"stage": "parse", "code": 3})
             >> nulog.observe("mem_mb", 604.0),
         )
         >> nu.Delay(1.0)
-        >> nu.v.Transaction(
+        >> nu.kv.Transaction(
             scraper.info("429 backoff", extra={"retry_in_s": 5})
             >> nulog.observe("http_latency_ms", 34.0),
         )

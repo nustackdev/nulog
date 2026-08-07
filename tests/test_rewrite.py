@@ -19,11 +19,11 @@ import nulog
 
 
 def _write(ctx, cmd):
-    nu.run(nu.v.Transaction(cmd), ctx)
+    nu.run(nu.kv.Transaction(cmd), ctx)
 
 
 def _read(ctx, atom):
-    return nu.run(nu.v.Snapshot(atom), ctx)[0]
+    return nu.run(nu.kv.Snapshot(atom), ctx)[0]
 
 
 # ---- structural: Log nodes get swapped ------------------------------
@@ -46,7 +46,7 @@ def test_rewrite_returns_a_tree_without_logcommand_nodes():
 
 def test_rewrite_leaves_non_log_nodes_intact():
     log = nu_logging.getLogger("app")
-    tree = nu.v.Transaction(log.info("x") >> nu.print("side-channel"))
+    tree = nu.kv.Transaction(log.info("x") >> nu.print("side-channel"))
 
     rewritten = nulog.from_std_logging(tree)
 
@@ -129,14 +129,14 @@ def test_rewritten_composed_seq_writes_in_order(ctx):
 def test_rewritten_stays_atomic_inside_a_transaction(ctx):
     """The rewritten Command still composes inside a Transaction."""
     class Account(nu.Shape):
-        balance = nu.v.IntRef.slot()
+        balance = nu.kv.IntRef.slot()
 
     log = nu_logging.getLogger("app")
     body = Account.balance.set(100) >> log.info("debit", extra={"amount": 5})
 
-    nu.run(nu.v.Transaction(nulog.from_std_logging(body)), ctx)
+    nu.run(nu.kv.Transaction(nulog.from_std_logging(body)), ctx)
 
-    bal = nu.run(nu.v.Snapshot(nu.Int(Account.balance)), ctx)[0]
+    bal = nu.run(nu.kv.Snapshot(nu.Int(Account.balance)), ctx)[0]
     assert bal == 100
     r = _read(ctx, nulog.messages.tail("app", 1))[0]
     assert r["msg"] == "debit"

@@ -8,11 +8,11 @@ import nulog
 
 
 def _write(ctx, cmd):
-    nu.run(nu.v.Transaction(cmd), ctx)
+    nu.run(nu.kv.Transaction(cmd), ctx)
 
 
 def _read(ctx, atom):
-    return nu.run(nu.v.Snapshot(atom), ctx)[0]
+    return nu.run(nu.kv.Snapshot(atom), ctx)[0]
 
 
 def test_observe_returns_nu_without_executing(ctx):
@@ -80,7 +80,7 @@ def test_point_exact_key(ctx):
 def test_compose_metric_and_log_is_atomic(ctx):
     """A metric and a log write ride the same Transaction."""
     nu.run(
-        nu.v.Transaction(
+        nu.kv.Transaction(
             nulog.getLogger("app").info("sample recorded", extra={"n": 1}),
             nulog.observe("throughput", 100.0, ts=1000.0),
         ),
@@ -97,7 +97,7 @@ def test_loop_mints_fresh_metric_key(ctx):
     nu.run(
         nu.ForEachDo(
             nu.Iter(nu.Literal([1, 2, 3, 4])),
-            nu.v.Transaction(nulog.observe("hb", 1.0)),
+            nu.kv.Transaction(nulog.observe("hb", 1.0)),
             item="_nl_i",
         ),
         ctx,

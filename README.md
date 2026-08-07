@@ -1,7 +1,7 @@
 # nulog
 
 Logging + metrics as a Nu app. Append-only logs and kh57-backed metric series
-kept in `nu.v`, written and read in Nu. Every write is a Nu Command; every
+kept in `nu.kv`, written and read in Nu. Every write is a Nu Command; every
 read is a Nu Query.
 
 ## Usage
@@ -13,15 +13,15 @@ Commands, reads are Nu Queries that yield `list[dict]` or `dict[str, int]`.
 import nu, nulog
 
 tree = nu.With(nulog.store(),
-    body=nu.v.Transaction(
+    body=nu.kv.Transaction(
         nulog.info("app", "server started", port=8080)
         >> nulog.warn("app", "cache miss", key="user:42")
         >> nulog.error("app", "request failed", path="/checkout", code=500)
         >> nulog.observe("cpu_load", 0.42)
     )
-    >> nu.v.Snapshot(nu.print("tail:", nulog.tail("app", 3)))
-    >> nu.v.Snapshot(nu.print("errors:", nulog.errors("app")))
-    >> nu.v.Snapshot(nu.print("count:", nulog.count_by_level("app"))),
+    >> nu.kv.Snapshot(nu.print("tail:", nulog.tail("app", 3)))
+    >> nu.kv.Snapshot(nu.print("errors:", nulog.errors("app")))
+    >> nu.kv.Snapshot(nu.print("count:", nulog.count_by_level("app"))),
 )
 
 nu.run(tree)
@@ -53,7 +53,7 @@ tree = nu.With(
     nulog.ui(["app", "scraper"], port=8080),
     body=nulog.info("app", "server started")
          >> nu.ForeverDo(
-             nu.v.Transaction(nulog.info("app", "tick")) >> nu.Delay(1.5)
+             nu.kv.Transaction(nulog.info("app", "tick")) >> nu.Delay(1.5)
          ),
 )
 

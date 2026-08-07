@@ -131,7 +131,7 @@ def _seed_stream_of_five(ctx) -> None:
     """Seed 5 messages into stream ``app``, distinguishable by their msg."""
     log = nulog.getLogger("app")
     nu.run(
-        nu.v.Transaction(
+        nu.kv.Transaction(
             log.info("one")
             >> log.info("two")
             >> log.info("three")
@@ -146,7 +146,7 @@ def test_messages_tail_returns_newest_first(ctx):
     """``tail`` mode reads ``entries[len-count:len]`` reversed."""
     _seed_stream_of_five(ctx)
     _seed_messages_state(ctx, mode=MODE_TAIL, count=3)
-    payload = nu.run(nu.v.Snapshot(_table_payload()), ctx)[0]
+    payload = nu.run(nu.kv.Snapshot(_table_payload()), ctx)[0]
     msgs = [row[2] for row in payload["rows"]]
     assert msgs == ["five", "four", "three"]
 
@@ -155,7 +155,7 @@ def test_messages_take_returns_oldest_first(ctx):
     """``take`` mode reads ``entries[0:count]`` in order."""
     _seed_stream_of_five(ctx)
     _seed_messages_state(ctx, mode=MODE_TAKE, count=3)
-    payload = nu.run(nu.v.Snapshot(_table_payload()), ctx)[0]
+    payload = nu.run(nu.kv.Snapshot(_table_payload()), ctx)[0]
     msgs = [row[2] for row in payload["rows"]]
     assert msgs == ["one", "two", "three"]
 
@@ -164,7 +164,7 @@ def test_messages_count_beyond_length_returns_all(ctx):
     """Count > len(stream) is clamped by the slice math to whatever exists."""
     _seed_stream_of_five(ctx)
     _seed_messages_state(ctx, mode=MODE_TAIL, count=100)
-    payload = nu.run(nu.v.Snapshot(_table_payload()), ctx)[0]
+    payload = nu.run(nu.kv.Snapshot(_table_payload()), ctx)[0]
     assert len(payload["rows"]) == 5
 
 
@@ -172,7 +172,7 @@ def test_messages_count_zero_is_clamped_to_min(ctx):
     """``SafeCount`` bumps a zero (or negative) count to ``MIN_COUNT``."""
     _seed_stream_of_five(ctx)
     _seed_messages_state(ctx, mode=MODE_TAIL, count=0)
-    payload = nu.run(nu.v.Snapshot(_table_payload()), ctx)[0]
+    payload = nu.run(nu.kv.Snapshot(_table_payload()), ctx)[0]
     assert len(payload["rows"]) == MIN_COUNT
 
 
@@ -180,7 +180,7 @@ def test_messages_filter_narrows_within_window(ctx):
     """The substring filter applies inside the current slice, not across the stream."""
     _seed_stream_of_five(ctx)
     _seed_messages_state(ctx, mode=MODE_TAIL, count=3, filter_="four")
-    payload = nu.run(nu.v.Snapshot(_table_payload()), ctx)[0]
+    payload = nu.run(nu.kv.Snapshot(_table_payload()), ctx)[0]
     msgs = [row[2] for row in payload["rows"]]
     assert msgs == ["four"]
 
@@ -190,7 +190,7 @@ def test_messages_filter_outside_window_yields_nothing(ctx):
     _seed_stream_of_five(ctx)
     # tail(2) window is ["five", "four"] -- "one" is out of scope.
     _seed_messages_state(ctx, mode=MODE_TAIL, count=2, filter_="one")
-    payload = nu.run(nu.v.Snapshot(_table_payload()), ctx)[0]
+    payload = nu.run(nu.kv.Snapshot(_table_payload()), ctx)[0]
     assert payload["rows"] == []
 
 
@@ -199,14 +199,14 @@ def test_messages_level_filter(ctx, level_filter):
     """Level filter reduces the window to matching entries; ``all`` passes through."""
     log = nulog.getLogger("app")
     nu.run(
-        nu.v.Transaction(
+        nu.kv.Transaction(
             log.info("hi", extra={"n": 1})
             >> log.error("boom", extra={"code": 500}),
         ),
         ctx,
     )
     _seed_messages_state(ctx, level=level_filter)
-    payload = nu.run(nu.v.Snapshot(_table_payload()), ctx)[0]
+    payload = nu.run(nu.kv.Snapshot(_table_payload()), ctx)[0]
     assert payload["columns"] == list(TABLE_COLUMNS)
     if level_filter == "error":
         assert [row[1] for row in payload["rows"]] == ["error"]
@@ -217,7 +217,7 @@ def test_messages_level_filter(ctx, level_filter):
 def test_metrics_chart_points_are_ordered_xy_pairs(ctx):
     """Sampled points come back as ``[[ts_us, value], ...]`` sorted by ts."""
     nu.run(
-        nu.v.Transaction(
+        nu.kv.Transaction(
             nulog.observe("cpu_load", 0.30)
             >> nulog.observe("cpu_load", 0.55)
             >> nulog.observe("cpu_load", 0.71),
@@ -229,7 +229,7 @@ def test_metrics_chart_points_are_ordered_xy_pairs(ctx):
         >> MetricsViewState.window.set(DEFAULT_WINDOW),
         ctx,
     )
-    points = nu.run(nu.v.Snapshot(_chart_points()), ctx)[0]
+    points = nu.run(nu.kv.Snapshot(_chart_points()), ctx)[0]
     assert points  # not empty
     for pair in points:
         assert len(pair) == 2

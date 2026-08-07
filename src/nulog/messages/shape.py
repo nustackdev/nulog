@@ -37,10 +37,10 @@ class LogEntry(nu.Shape):
     :func:`nulog.messages.query.FieldsFromJson`).
     """
 
-    ts_us: nu.v.IntRef
-    level: nu.v.StrRef
-    msg: nu.v.StrRef
-    fields: nu.v.StrRef
+    ts_us: nu.kv.IntRef
+    level: nu.kv.StrRef
+    msg: nu.kv.StrRef
+    fields: nu.kv.StrRef
 
 
 class MessageStream(nu.Shape):
@@ -51,7 +51,7 @@ class MessageStream(nu.Shape):
     rocksdb row -- each ``.append()`` picks its own unique log key.
     """
 
-    entries = nu.v.ShapesDictRef.slot(
+    entries = nu.kv.ShapesDictRef.slot(
         LogEntry, view_type=LazyLogIndexedDictView, key_type=str,
     )
 
@@ -59,4 +59,4 @@ class MessageStream(nu.Shape):
 class Messages(nu.Shape):
     """The message store root -- every stream, keyed by name."""
 
-    streams: nu.v.ShapesDictRef[str, MessageStream]
+    streams: nu.kv.ShapesDictRef[str, MessageStream]
