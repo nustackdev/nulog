@@ -21,13 +21,15 @@ maintainers = [
     {name = "Gor Arakelyan", email = "gorarkln@gmail.com"}
 ]
 keywords = [
-    "logging",
-    "logs",
-    "structured-logging",
-    "observability",
+    "nustack",
     "nu",
+    "python",
+    "logging",
+    "metrics",
+    "observability",
+    "serverless",
+    "embedded",
     "rocksdb",
-    "append-only",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
