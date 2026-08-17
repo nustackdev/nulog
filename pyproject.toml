@@ -10,7 +10,7 @@ build-backend = "setuptools.build_meta"
 # ============================================================================
 [project]
 name = "nulog"
-version = "0.1.4"
+version = "0.1.5"
 description = "Logging as a Nu app: append-only logs over any storage, written and queried in Nu."
 readme = "README.md"
 license = "Apache-2.0"
@@ -43,7 +43,7 @@ classifiers = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "nustack-py[ui,virtuals]>=0.1.4",
+    "nustack-py[ui,kv]>=0.1.14",
     "rdbpython>=0.2.6",
 ]
 
