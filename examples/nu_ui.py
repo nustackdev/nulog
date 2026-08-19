@@ -1,7 +1,7 @@
 """nulog viewer: browser log viewer over a live stream of messages + metrics.
 
 One store bracket, one ``nulog.ui(...)`` bracket, one body that seeds a
-handful of entries per stream/series then loops fresh content every ~1s.
+handful of entries per stream/series then loops fresh content every 50ms.
 Same shape as ``nu/examples/nudle_memory.py`` -- two brackets, one body.
 
 Open http://127.0.0.1:8080 after starting.
@@ -53,32 +53,31 @@ def _tick() -> nu.Nu:
             app.info("request ok", extra={"path": "/", "ms": 12})
             >> nulog.observe("cpu_load", 0.45),
         )
-        >> nu.Delay(1.0)
+        >> nu.Delay(0.05)
         >> nu.kv.Transaction(
             scraper.info("page fetched", extra={"url": "/robots.txt"})
             >> nulog.observe("http_latency_ms", 22.0),
         )
-        >> nu.Delay(1.0)
+        >> nu.Delay(0.05)
         >> nu.kv.Transaction(
-            app.warning("slow request", extra={"ms": 210})
-            >> nulog.observe("cpu_load", 0.61),
+            app.warning("slow request", extra={"ms": 210}) >> nulog.observe("cpu_load", 0.61),
         )
-        >> nu.Delay(1.0)
+        >> nu.Delay(0.05)
         >> nu.kv.Transaction(
             worker.error("stage failed", extra={"stage": "parse", "code": 3})
             >> nulog.observe("mem_mb", 604.0),
         )
-        >> nu.Delay(1.0)
+        >> nu.Delay(0.05)
         >> nu.kv.Transaction(
             scraper.info("429 backoff", extra={"retry_in_s": 5})
             >> nulog.observe("http_latency_ms", 34.0),
         )
-        >> nu.Delay(1.0),
+        >> nu.Delay(0.05),
     )
 
 
 tree = nu.With(
-    nulog.store(),
+    nulog.store("fast_updates.db"),
     nulog.ui(port=8080),
     body=_seed() >> _tick(),
 )

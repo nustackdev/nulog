@@ -163,7 +163,7 @@ class MetricsBody(nu.ui.Column):
     """Metrics tab: picker row + one sampled line chart."""
 
     pickers = MetricsPickers.slot()
-    chart = nu.ui.LineChart.slot()
+    chart = nu.ui.LineChart.slot(x_format="datetime_us")
 
 
 class ViewerTabs(nu.ui.Tabs):

@@ -70,4 +70,4 @@ SAMPLE_LIMIT = 500
 
 # ---- global tick pace ---------------------------------------------------
 
-TICK_SECONDS = 1.0
+TICK_SECONDS = 0.5

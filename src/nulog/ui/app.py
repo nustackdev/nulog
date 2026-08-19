@@ -55,18 +55,41 @@ def _as_options(keys: nu.Nu) -> nu.Nu:
     )
 
 
+def _auto_pick_first(
+    keys: nu.Nu,
+    state_ref: nu.Nu,
+    control_ref: nu.Nu,
+) -> nu.Nu:
+    """Seed ``state_ref`` + mirror to ``control_ref`` with the first key.
+
+    Fires only when ``state_ref`` is still empty (first open) and the store
+    actually has at least one key -- so once the user picks something we
+    never overwrite it, and empty stores stay empty instead of blowing up.
+    """
+    collected = nu.Collect(nu.Iter(keys))
+    first = nu.GetItem(collected, 0)
+    return nu.IfDo(
+        nu.And(nu.Eq(state_ref, ""), nu.Gt(nu.Len(collected), 0)),
+        state_ref.set(first) >> control_ref.set(first),
+    )
+
+
 def _messages_tick() -> nu.Nu:
-    """One messages-tab tick: refresh stream picker options, then repaint."""
+    """One messages-tab tick: refresh stream picker options, auto-pick first, repaint."""
+    keys = Messages.streams.keys()
     return (
-        shape.StreamField.control.set_options(_as_options(Messages.streams.keys()))
+        shape.StreamField.control.set_options(_as_options(keys))
+        | _auto_pick_first(keys, shape.ViewState.stream, shape.StreamField.control)
         | messages.repaint()
     )
 
 
 def _metrics_tick() -> nu.Nu:
-    """One metrics-tab tick: refresh series picker options, then repaint."""
+    """One metrics-tab tick: refresh series picker options, auto-pick first, repaint."""
+    keys = Metrics.series.keys()
     return (
-        shape.SeriesField.control.set_options(_as_options(Metrics.series.keys()))
+        shape.SeriesField.control.set_options(_as_options(keys))
+        | _auto_pick_first(keys, shape.MetricsViewState.series, shape.SeriesField.control)
         | metrics.repaint()
     )
 
