@@ -1,32 +1,24 @@
 """Log-message store layout.
 
 One shape tree: :class:`Messages` at the root, keyed by stream name, each
-stream an append-only :class:`ShapesListRef` of :class:`LogEntry`. No kh57
-key encoding on the message path -- ordering is positional (append time),
-which is chronological by construction. Kh57 stays on the metric side
-because that's where reservoir sampling earns its keep.
+stream an append-only :class:`ShapesListRef` of :class:`LogEntry`.
 
-The :func:`len` op on a ShapesListRef is O(1) via the underlying
-substrate, so ``tail(stream, n)`` compiles down to ``len -> slice[len-n:len]
--> reverse`` and touches only the last ``n`` entries -- safe at
-trillion-entry scale.
+No kh57 key encoding on the message path -- ordering is positional (append time),
+which is chronological by construction.
+Kh57 stays on the metric side because that's where reservoir sampling earns its keep.
 """
 
 from __future__ import annotations
 
 import nu
-from virtuals._views.log_indexed_dict_view import LazyLogIndexedDictView
+from virtuals.views import LazyLogIndexedDictView
 
 
 __all__ = [
-    "LEVELS",
     "LogEntry",
     "MessageStream",
     "Messages",
 ]
-
-
-LEVELS: tuple[str, ...] = ("debug", "info", "warning", "error", "critical")
 
 
 class LogEntry(nu.Shape):
@@ -52,7 +44,9 @@ class MessageStream(nu.Shape):
     """
 
     entries = nu.kv.ShapesDictRef.slot(
-        LogEntry, view_type=LazyLogIndexedDictView, key_type=str,
+        LogEntry,
+        view_type=LazyLogIndexedDictView,
+        key_type=str,
     )
 
 

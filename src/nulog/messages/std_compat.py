@@ -1,9 +1,8 @@
 """Tree rewrites that swap ``nu.std.logging`` atoms for persistent ``nulog`` writes.
 
 :func:`from_std_logging` walks a Nu tree and replaces every
-``nu.std.logging.Log`` with the equivalent persistent-write subtree
-(an ``AppendCommand`` on the stream's ``entries`` list). App code stays
-written in ``nu.std.logging`` style -- ``log.info(...)`` -- and the
+``nu.std.logging.Log`` with the equivalent persistent-write subtree.
+App code stays written in ``nu.std.logging`` style -- ``log.info(...)`` -- and the
 *deployment* picks whether logs go to Python's ``logging`` (default -- no
 rewrite) or persist into nulog (wrap the tree in :func:`from_std_logging`).
 
@@ -21,10 +20,7 @@ Usage::
     )
 
     tree = nu.With(nulog.store(), body=nulog.from_std_logging(body))
-    nu.run(tree)   # every log.* call now persists
-
-Any level and logger *literal* is used at rewrite time; dynamic terms pass
-straight through and normalize at eval time via ``LevelName``.
+    nu.run(tree)  # every log.* call now persists
 """
 
 from __future__ import annotations
@@ -35,7 +31,7 @@ from nu.core import Literal
 from nu.std.logging import Log
 from nu.tree import map_nodes
 
-from .log import _entry
+from .append import append
 
 
 if TYPE_CHECKING:
@@ -75,6 +71,6 @@ def from_std_logging(tree: nu.Nu) -> nu.Nu:
         args: tuple[nu.Nu, ...] = tuple(children[4:])
         extra = cast("dict[str, object] | None", node._payload.get("extra")) or None
 
-        return _entry(stream, level, msg, args, extra)
+        return append(stream, level, msg, args, extra)
 
     return map_nodes(tree, _rewrite, order="bottom_up")

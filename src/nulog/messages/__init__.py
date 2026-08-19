@@ -1,39 +1,44 @@
-"""nulog.messages -- log-message store: shape + write API + read API.
+"""nulog.messages -- log-message store: types + core write/read + facades.
 
-Writes are Python-``logging``-shaped (``nulog.getLogger(...).info(...)``); reads
-are three positional primitives (``tail``, ``slice``, ``point``) that touch
-only the entries they return. See :mod:`nulog.messages.shape` for the store
-layout, :mod:`nulog.messages.log` for writes, :mod:`nulog.messages.query`
-for reads.
+Module layout:
+
+Core (what a log IS):
+- :mod:`.append`       -- the write-tree primitive (``append(stream, level, msg, ...)``).
+- :mod:`.query`        -- reads (``tail`` / ``slice`` / ``point``).
+- :mod:`.shapes`       -- store layout (``Messages`` / ``MessageStream`` / ``LogEntry``).
+- :mod:`.interactions` -- host atoms + typed seams (``level_name`` / ``percent_format`` / ``fields_as_json``).
+
+DX (Python-logging-shaped facades):
+- :mod:`.logger`       -- ``Logger`` class + ``getLogger``.
+- :mod:`.logger_root`  -- module-level root facade (``info`` / ``debug`` / ``log`` / ...).
+
+std compat:
+- :mod:`.std_compat`   -- ``from_std_logging`` rewrites ``nu.std.logging`` atoms into persistent writes.
+
+Types:
+- :mod:`.types`        -- level int constants + canonical name tuple.
 """
 
 from __future__ import annotations
 
-from .log import (
+from .append import append
+from .interactions import fields_as_json, level_name, percent_format
+from .logger import Logger, getLogger
+from .logger_root import critical, debug, error, info, log, warn, warning
+from .query import FieldsFromJson, point, slice, tail
+from .shapes import LogEntry, Messages, MessageStream
+from .std_compat import from_std_logging
+from .types import (
     CRITICAL,
     DEBUG,
     ERROR,
     FATAL,
     INFO,
+    LEVELS,
     NOTSET,
     WARN,
     WARNING,
-    FieldsAsJson,
-    LevelName,
-    Logger,
-    PercentFormat,
-    critical,
-    debug,
-    error,
-    getLogger,
-    info,
-    log,
-    warn,
-    warning,
 )
-from .query import FieldsFromJson, point, slice, tail
-from .rewrite import from_std_logging
-from .shape import LEVELS, LogEntry, Messages, MessageStream
 
 
 __all__ = [
@@ -46,21 +51,22 @@ __all__ = [
     "NOTSET",
     "WARN",
     "WARNING",
-    "FieldsAsJson",
     "FieldsFromJson",
-    "LevelName",
     "LogEntry",
     "Logger",
     "MessageStream",
     "Messages",
-    "PercentFormat",
+    "append",
     "critical",
     "debug",
     "error",
+    "fields_as_json",
     "from_std_logging",
     "getLogger",
     "info",
+    "level_name",
     "log",
+    "percent_format",
     "point",
     "slice",
     "tail",

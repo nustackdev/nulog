@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import nu
 
-from ..messages.shape import LEVELS
+from ..messages.types import LEVELS
 
 
 __all__ = [

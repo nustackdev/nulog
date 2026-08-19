@@ -23,7 +23,7 @@ import json
 
 import nu
 
-from ..messages.shape import Messages
+from ..messages.shapes import Messages
 from .shape import (
     DEFAULT_LEVEL,
     MAX_COUNT,

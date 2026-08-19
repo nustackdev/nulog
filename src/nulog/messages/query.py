@@ -19,10 +19,15 @@ predicates live in this module -- this is not Elasticsearch.
 from __future__ import annotations
 
 import json
+from typing import TYPE_CHECKING
 
 import nu
 
-from .shape import Messages
+from .shapes import Messages
+
+
+if TYPE_CHECKING:
+    from nu.lang import IntArg, StrArg
 
 
 __all__ = [
@@ -55,12 +60,12 @@ def FieldsFromJson(raw: str) -> dict:  # noqa: N802
 _KEY = nu.AnyAttrRef("_nl_key")
 
 
-def _entries(stream: str | nu.Nu) -> nu.Nu:
+def _entries(stream: StrArg) -> nu.Nu:
     """The entries mapping for ``stream`` (``stream`` may be a Nu ref)."""
     return Messages.streams[stream].entries
 
 
-def _values_list(stream: str | nu.Nu) -> nu.Nu:
+def _values_list(stream: StrArg) -> nu.Nu:
     """Materialize entry values in insertion order.
 
     Used only by :func:`slice` and :func:`point`, which are inherently
@@ -84,7 +89,7 @@ def _rows_of(seq: nu.Nu) -> nu.Nu:
     return nu.Collect(nu.Map(nu.Iter(seq), _row(), key="_nl_item"))
 
 
-def tail(stream: str | nu.Nu, n: int | nu.Nu) -> nu.Nu:
+def tail(stream: StrArg, n: IntArg) -> nu.Nu:
     """The newest ``n`` entries of ``stream``, newest-first.
 
     O(n) via a bounded reverse-cursor scan over ``__keys__/`` -- reads
@@ -102,10 +107,10 @@ def tail(stream: str | nu.Nu, n: int | nu.Nu) -> nu.Nu:
 
 
 def slice(
-    stream: str | nu.Nu,
-    start: int | nu.Nu,
-    stop: int | nu.Nu,
-    step: int | nu.Nu = 1,
+    stream: StrArg,
+    start: IntArg,
+    stop: IntArg,
+    step: IntArg = 1,
 ) -> nu.Nu:
     """Positional slice of ``stream``: ``entries[start:stop:step]``, decoded.
 
@@ -117,7 +122,7 @@ def slice(
     return _rows_of(nu.GetItem(values, nu.Slice(start, stop, step)))
 
 
-def point(stream: str | nu.Nu, index: int | nu.Nu) -> nu.Nu:
+def point(stream: StrArg, index: IntArg) -> nu.Nu:
     """One entry at positional ``index`` in ``stream``, decoded to a row dict.
 
     O(*stream size*) for the same reason as :func:`slice`.
