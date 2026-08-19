@@ -171,12 +171,12 @@ def build_ui(
             navigator (e.g. metrics-only dashboards).
         heading: page heading text. ``None`` skips writing the heading.
         metrics_tab: whether to wire the metrics tab. Turn off when the
-            enclosing store has no :class:`~nulog.metrics.shape.Metrics`
+            enclosing store has no :class:`~nulog.metrics.shapes.Metrics`
             navigator (e.g. log-only dashboards embedded in a larger app).
 
     The returned tree is scope-free wrt virtuals: reads and writes on
     :class:`~nulog.messages.shapes.Messages` and
-    :class:`~nulog.metrics.shape.Metrics` are emitted bare so the caller
+    :class:`~nulog.metrics.shapes.Metrics` are emitted bare so the caller
     can pick the correct atomicity scope (typically via
     ``nu.kv.auto_flow_atomic(tree, scope=Messages)`` +
     ``scope=Metrics``). Standalone callers get this automatically via

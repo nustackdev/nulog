@@ -43,7 +43,7 @@ classifiers = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "nustack-py[ui,kv]>=0.1.14",
+    "nustack-py[ui,kv]>=0.1.16",
     "rdbpython>=0.2.6",
 ]
 

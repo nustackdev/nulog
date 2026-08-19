@@ -1,16 +1,17 @@
-"""nulog.metrics -- metric time-series store: shape + write API + read API.
+"""nulog.metrics -- metric time-series store: shapes + write/read primitives.
 
-Writes are one op (``nulog.observe(name, value)``); reads are three
-primitives (``range``, ``sample``, ``point``) that ride kh57's shifted-key
-substrate. See :mod:`nulog.metrics.shape`, :mod:`nulog.metrics.log`,
-:mod:`nulog.metrics.query`.
+Module layout:
+- :mod:`.shapes` -- store layout (``Metrics`` / ``MetricSeries`` / ``MetricPoint``).
+- :mod:`.ops`    -- write + read primitives (``observe`` / ``range`` / ``sample``).
+
+Writes are one op (``nulog.observe(name, value)``); reads are two primitives
+(``range``, ``sample``) that ride kh57's shifted-key substrate.
 """
 
 from __future__ import annotations
 
-from .log import observe
-from .query import point, range, sample
-from .shape import MetricPoint, Metrics, MetricSeries
+from .ops import observe, range, sample
+from .shapes import MetricPoint, Metrics, MetricSeries
 
 
 __all__ = [
@@ -18,7 +19,6 @@ __all__ = [
     "MetricSeries",
     "Metrics",
     "observe",
-    "point",
     "range",
     "sample",
 ]

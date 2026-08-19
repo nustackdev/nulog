@@ -45,10 +45,6 @@ tree = nu.With(nulog.store(),
     >> nu.kv.Snapshot(nu.print(
         "== http_latency_ms: sample(5) ==",
         nulog.metrics.sample("http_latency_ms", 5, _BEGIN, _END),
-    ))
-    >> nu.kv.Snapshot(nu.print(
-        "== cpu_load: point(t0_us) ==",
-        nulog.metrics.point("cpu_load", _BEGIN),
     )),
 )
 

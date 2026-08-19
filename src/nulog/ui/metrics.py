@@ -17,7 +17,7 @@ from __future__ import annotations
 import nu
 import nu.std.time as _nu_time
 
-from ..metrics.shape import Metrics
+from ..metrics.shapes import Metrics
 from .shape import SAMPLE_LIMIT, MetricsBody, MetricsViewState
 
 

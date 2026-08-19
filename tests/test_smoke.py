@@ -16,7 +16,7 @@ def test_submodules_are_reachable():
     """Reads live on ``nulog.messages`` / ``nulog.metrics`` -- no top-level shadow."""
     for name in ("tail", "slice", "getLogger", "Logger", "from_std_logging"):
         assert hasattr(nulog.messages, name), name
-    for name in ("range", "sample", "point", "observe"):
+    for name in ("range", "sample", "observe"):
         assert hasattr(nulog.metrics, name), name
 
 

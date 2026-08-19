@@ -66,17 +66,6 @@ def test_range_out_of_bounds_is_empty(ctx):
     assert _read(ctx, nulog.metrics.sample("m", 3, 0, 1000)) == []
 
 
-def test_point_exact_key(ctx):
-    """`point(name, us)` reads one metric point at the exact microsecond key."""
-    ts = 1234.567
-    us = int(ts * 1_000_000)
-    _write(ctx, nulog.observe("m", 9.5, ts=ts))
-    r = _read(ctx, nulog.metrics.point("m", us))
-    assert r["value"] == 9.5
-    assert r["ts"] == ts
-    assert r["ts_us"] == us
-
-
 def test_compose_metric_and_log_is_atomic(ctx):
     """A metric and a log write ride the same Transaction."""
     nu.run(
