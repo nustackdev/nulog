@@ -1,6 +1,6 @@
 <div align="center">
   <h1>nulog</h1>
-  <h3>Fast, serverless logger built on Nu, for infinite-scale streams</h3>
+  <h3>Fast, serverless logger built on <a href="https://github.com/nustackdev/nu">Nu</a>, for infinite-scale streams</h3>
 
   [![Powered by Nu](https://img.shields.io/badge/powered%20by-Nu-5865F2)](https://github.com/nustackdev/nu)
   [![PyPI - Python Version](https://img.shields.io/badge/python-%3E%3D%203.10-blue)](https://pypi.org/project/nulog/)

@@ -73,14 +73,15 @@ from .ui import (
     DEFAULT_LEVEL,
     LEVEL_OPTIONS,
     TABLE_COLUMNS,
+    MessagesPage,
+    MetricsPage,
     ViewerIndex,
-    ViewerPage,
     build_ui,
 )
 from .presets import store, store_ro, ui, viewer  # noqa: E402  -- rebinds ``ui`` over the submodule
 
 
-__version__ = "0.1.5"
+__version__ = "0.1.6"
 
 __all__ = [
     "CRITICAL",
@@ -97,8 +98,9 @@ __all__ = [
     "WARNING",
     "Client",
     "Logger",
+    "MessagesPage",
+    "MetricsPage",
     "ViewerIndex",
-    "ViewerPage",
     "build_ui",
     "critical",
     "debug",

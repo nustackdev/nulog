@@ -136,9 +136,8 @@ def _metrics_reactives() -> nu.Nu:
 def build_ui(
     *,
     title: str | None = "nulog viewer",
-    messages_tab: bool = True,
-    metrics_tab: bool = True,
-    heading: str | None = "nulog viewer",
+    messages_page: bool = True,
+    metrics_page: bool = True,
 ) -> nu.Nu:
     """The viewer's reactive Nu tree.
 
@@ -147,11 +146,10 @@ def build_ui(
             ``None`` when embedding into a host Index that owns its own
             title (e.g. multi-page dashboards). Default matches the
             standalone :func:`nulog.ui` entrypoint.
-        messages_tab: whether to wire the messages tab. Turn off when
+        messages_page: whether to wire the messages page. Turn off when
             the enclosing store has no :class:`~nulog.messages.shapes.Messages`
             navigator (e.g. metrics-only dashboards).
-        heading: page heading text. ``None`` skips writing the heading.
-        metrics_tab: whether to wire the metrics tab. Turn off when the
+        metrics_page: whether to wire the metrics page. Turn off when the
             enclosing store has no :class:`~nulog.metrics.shapes.Metrics`
             navigator (e.g. log-only dashboards embedded in a larger app).
 
@@ -163,20 +161,20 @@ def build_ui(
     ``scope=Metrics``). Standalone callers get this automatically via
     the outer ``nu.arun`` default sweep against a single untagged store.
     """
-    if not (messages_tab or metrics_tab):
-        msg = "build_ui: at least one of messages_tab / metrics_tab must be True"
+    if not (messages_page or metrics_page):
+        msg = "build_ui: at least one of messages_page / metrics_page must be True"
         raise ValueError(msg)
 
     seeds: list[nu.Nu] = []
     tick_parts: list[nu.Nu] = []
     reactive_parts: list[nu.Nu] = []
 
-    if messages_tab:
+    if messages_page:
         seeds.append(_seed_messages())
         tick_parts.append(_messages_tick())
         reactive_parts.append(_messages_reactives())
 
-    if metrics_tab:
+    if metrics_page:
         seeds.append(_seed_metrics())
         tick_parts.append(_metrics_tick())
         reactive_parts.append(_metrics_reactives())
@@ -195,8 +193,6 @@ def build_ui(
         reactives = reactives | r
 
     body: nu.Nu = seed_body
-    if heading is not None:
-        body = body >> shape.ViewerPage.heading.set(heading, level=2)
     if title is not None:
         body = shape.ViewerIndex.title.set(title) >> body
     body = body >> reactives

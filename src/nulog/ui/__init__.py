@@ -1,17 +1,16 @@
-"""Browser log viewer -- one nudle Page with two tabs, one Nu tree.
+"""Browser log viewer -- two nudle pages, one Nu tree.
 
 Split across five files:
 
 - :mod:`.consts` -- tuning knobs: defaults, option sets, bounds, tick pace.
 - :mod:`.shape` -- view states (:class:`ViewState`, :class:`MetricsViewState`)
   and display shapes (labeled :class:`~nu.ui.Field` wrappers,
-  :class:`FiltersRow` / :class:`MetricsPickers`, :class:`MessagesBody` /
-  :class:`MetricsBody`, :class:`ViewerTabs`, :class:`ViewerPage`,
-  :class:`ViewerIndex`).
-- :mod:`.messages` -- messages tab: bounded slice (tail / take) +
+  :class:`FiltersRow` / :class:`MetricsPickers`, :class:`MessagesPage` /
+  :class:`MetricsPage`, :class:`ViewerIndex`).
+- :mod:`.messages` -- messages page: bounded slice (tail / take) +
   in-window level / substring predicates + table payload, plus the
   value-only ``@nu.host`` formatters.
-- :mod:`.metrics` -- metrics tab: kh57-sampled ``[ts_us, value]`` points
+- :mod:`.metrics` -- metrics page: kh57-sampled ``[ts_us, value]`` points
   for the line chart.
 - :mod:`.app` -- :func:`build_ui`, the reactive composer that seeds
   state, hydrates chrome, and races the tick against filter reactives.
@@ -43,15 +42,14 @@ from .shape import (
     FilterField,
     FiltersRow,
     LevelField,
-    MessagesBody,
-    MetricsBody,
+    MessagesPage,
+    MetricsPage,
+    MetricsPickers,
     MetricsViewState,
     ModeField,
     SeriesField,
     StreamField,
     ViewerIndex,
-    ViewerPage,
-    ViewerTabs,
     ViewState,
     WindowField,
 )
@@ -76,16 +74,15 @@ __all__ = [
     "FilterField",
     "FiltersRow",
     "LevelField",
-    "MessagesBody",
-    "MetricsBody",
+    "MessagesPage",
+    "MetricsPage",
+    "MetricsPickers",
     "MetricsViewState",
     "ModeField",
     "SeriesField",
     "StreamField",
     "ViewState",
     "ViewerIndex",
-    "ViewerPage",
-    "ViewerTabs",
     "WindowField",
     "build_ui",
     "fmt_fields",

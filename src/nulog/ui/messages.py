@@ -29,7 +29,7 @@ def repaint() -> nu.Nu:
     No-ops (writes an empty table) when no stream is selected -- an empty
     stream key would break the binary codec's prefix encoding.
     """
-    empty = shape.MessagesBody.table.set(
+    empty = shape.MessagesPage.table.set(
         nu.Dict.of(columns=list(consts.TABLE_COLUMNS), rows=[]),
     )
     return nu.IfDo(nu.Eq(shape.ViewState.stream, ""), empty, _repaint_body())
@@ -88,6 +88,6 @@ def _repaint_body() -> nu.Nu:
             key="_nl_item",
         ),
     )
-    return shape.MessagesBody.table.set(
+    return shape.MessagesPage.table.set(
         nu.Dict.of(columns=list(consts.TABLE_COLUMNS), rows=rows),
     )

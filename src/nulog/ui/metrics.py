@@ -27,7 +27,7 @@ def repaint() -> nu.Nu:
     No-ops (clears the chart) when no series is selected -- an empty series
     key would break the binary codec's prefix encoding.
     """
-    empty = shape.MetricsBody.chart.set_points([])
+    empty = shape.MetricsPage.chart.set_points([])
     return nu.IfDo(nu.Eq(shape.MetricsViewState.series, ""), empty, _repaint_body())
 
 
@@ -36,7 +36,7 @@ def _repaint_body() -> nu.Nu:
     now = nu.std.time.time_ns() // 1000
     begin = nu.std.time.time_ns() // 1000 - nu.int(shape.MetricsViewState.window) * 1_000_000
 
-    return shape.MetricsBody.chart.set_points(
+    return shape.MetricsPage.chart.set_points(
         nu.Collect(
             nu.Sorted(
                 nu.Map(

@@ -37,6 +37,7 @@ tests/reports/
 # Local data
 .db*/
 .logs*/
+*.db/
 
 # OS
 .DS_Store
