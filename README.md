@@ -42,15 +42,16 @@ Metric rows: `{"ts_us": int, "ts": float, "value": float}`.
 
 ## UI
 
-The viewer is a bracket too: `nulog.ui(streams, port=)` boots a nudle server
-under `nulog.store(...)`. Same shape as any Nu-nudle app.
+The viewer is a bracket too: `nulog.ui(port=)` boots a nudle server
+under `nulog.store(...)`. Stream + series pickers hydrate at eval time
+from the actual keys, refreshed every tick. Same shape as any Nu-nudle app.
 
 ```python
 import asyncio, nu, nulog
 
 tree = nu.With(
     nulog.store("logs.db"),
-    nulog.ui(["app", "scraper"], port=8080),
+    nulog.ui(port=8080),
     body=nulog.info("app", "server started")
          >> nu.ForeverDo(
              nu.kv.Transaction(nulog.info("app", "tick")) >> nu.Delay(1.5)

@@ -5,34 +5,30 @@
 - stores the page title + heading,
 - seeds :class:`~.shape.ViewState` and :class:`~.shape.MetricsViewState`
   to sane defaults,
-- hydrates the chrome for both tabs (option lists, radio choices, count
-  bounds) -- labels themselves come from each :class:`~nu.ui.Field`
-  subclass's ``label`` ClassVar,
+- refreshes stream / series picker options every tick from the actual
+  ``Messages.streams`` / ``Metrics.series`` keys, so new streams / series
+  show up in the dropdowns without a restart,
 - races a live tick (repaint every :data:`~.consts.TICK_SECONDS`) against
   reactives for each filter input.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import nu
 
+from nulog.messages import Messages
+from nulog.metrics import Metrics
+
 from . import consts, messages, metrics, shape
-
-
-if TYPE_CHECKING:
-    from collections.abc import Sequence
 
 
 __all__ = ["build_ui"]
 
 
-def _seed_messages(streams: Sequence[str]) -> nu.Nu:
-    """Seed the messages ViewState to defaults (first stream, tail mode)."""
-    first_stream = streams[0] if streams else ""
+def _seed_messages() -> nu.Nu:
+    """Seed the messages ViewState to defaults (empty stream, tail mode)."""
     return (
-        shape.ViewState.stream.set(first_stream)
+        shape.ViewState.stream.set("")
         >> shape.ViewState.mode.set(consts.DEFAULT_MODE)
         >> shape.ViewState.count.set(consts.DEFAULT_COUNT)
         >> shape.ViewState.level.set(consts.DEFAULT_LEVEL)
@@ -40,36 +36,38 @@ def _seed_messages(streams: Sequence[str]) -> nu.Nu:
     )
 
 
-def _seed_metrics(series: Sequence[str]) -> nu.Nu:
-    """Seed the metrics ViewState to defaults (first series, default window)."""
-    first_series = series[0] if series else ""
-    return shape.MetricsViewState.series.set(first_series) >> shape.MetricsViewState.window.set(
-        consts.DEFAULT_WINDOW
+def _seed_metrics() -> nu.Nu:
+    """Seed the metrics ViewState to defaults (empty series, default window)."""
+    return shape.MetricsViewState.series.set("") >> shape.MetricsViewState.window.set(
+        consts.DEFAULT_WINDOW,
     )
 
 
-def _hydrate_messages_chrome(streams: Sequence[str]) -> nu.Nu:
-    """Feed the stream picker its dynamic option list + initial selection.
-
-    All other chrome (mode / count / level / filter) is pinned at slot time
-    in ``.shape`` -- see ``ModeField.control``, ``CountField.control``, ...
-    """
-    first_stream = streams[0] if streams else ""
-    stream_opts = list(streams) or [first_stream]
-    return shape.StreamField.control.set_options(stream_opts) | shape.StreamField.control.set(
-        first_stream
+def _as_options(keys: nu.Nu) -> nu.Nu:
+    """Map a Nu-side stream of key strings into ``[{value, label}, ...]``."""
+    key = nu.AnyAttrRef("_nl_opt")
+    return nu.Collect(
+        nu.Map(
+            nu.Iter(keys),
+            nu.Dict.of(value=key, label=key),
+            key="_nl_opt",
+        ),
     )
 
 
-def _hydrate_metrics_chrome(series: Sequence[str]) -> nu.Nu:
-    """Feed the series picker its dynamic option list + initial selection.
+def _messages_tick() -> nu.Nu:
+    """One messages-tab tick: refresh stream picker options, then repaint."""
+    return (
+        shape.StreamField.control.set_options(_as_options(Messages.streams.keys()))
+        | messages.repaint()
+    )
 
-    Window options + default are pinned at slot time on ``WindowField.control``.
-    """
-    first_series = series[0] if series else ""
-    series_opts = list(series) or [first_series]
-    return shape.SeriesField.control.set_options(series_opts) | shape.SeriesField.control.set(
-        first_series
+
+def _metrics_tick() -> nu.Nu:
+    """One metrics-tab tick: refresh series picker options, then repaint."""
+    return (
+        shape.SeriesField.control.set_options(_as_options(Metrics.series.keys()))
+        | metrics.repaint()
     )
 
 
@@ -113,8 +111,6 @@ def _metrics_reactives() -> nu.Nu:
 
 
 def build_ui(
-    streams: Sequence[str],
-    series: Sequence[str],
     *,
     title: str | None = "nulog viewer",
     messages_tab: bool = True,
@@ -124,10 +120,6 @@ def build_ui(
     """The viewer's reactive Nu tree.
 
     Args:
-        streams: message stream names for the messages tab switcher.
-            Ignored when ``messages_tab=False``.
-        series: metric series names for the metrics tab switcher.
-            Ignored when ``metrics_tab=False``.
         title: browser-tab title to set on the enclosing Index. Set to
             ``None`` when embedding into a host Index that owns its own
             title (e.g. multi-page dashboards). Default matches the
@@ -153,32 +145,22 @@ def build_ui(
         raise ValueError(msg)
 
     seeds: list[nu.Nu] = []
-    chrome_parts: list[nu.Nu] = []
     tick_parts: list[nu.Nu] = []
     reactive_parts: list[nu.Nu] = []
 
-    if heading is not None:
-        chrome_parts.append(shape.ViewerPage.heading.set(heading, level=2))
-
     if messages_tab:
-        seeds.append(_seed_messages(streams))
-        chrome_parts.append(_hydrate_messages_chrome(streams))
-        tick_parts.append(messages.repaint())
+        seeds.append(_seed_messages())
+        tick_parts.append(_messages_tick())
         reactive_parts.append(_messages_reactives())
 
     if metrics_tab:
-        seeds.append(_seed_metrics(series))
-        chrome_parts.append(_hydrate_metrics_chrome(series))
-        tick_parts.append(metrics.repaint())
+        seeds.append(_seed_metrics())
+        tick_parts.append(_metrics_tick())
         reactive_parts.append(_metrics_reactives())
 
     seed_body = seeds[0]
     for s in seeds[1:]:
         seed_body = seed_body >> s
-
-    chrome_body = chrome_parts[0]
-    for c in chrome_parts[1:]:
-        chrome_body = chrome_body | c
 
     tick_body = tick_parts[0]
     for t in tick_parts[1:]:
@@ -189,7 +171,9 @@ def build_ui(
     for r in reactive_parts:
         reactives = reactives | r
 
-    body: nu.Nu = seed_body >> chrome_body
+    body: nu.Nu = seed_body
+    if heading is not None:
+        body = body >> shape.ViewerPage.heading.set(heading, level=2)
     if title is not None:
         body = shape.ViewerIndex.title.set(title) >> body
     body = body >> reactives

@@ -35,7 +35,7 @@ Live viewer::
 
     tree = nu.With(
         nulog.store("logs.db"),
-        nulog.ui(["app", "scraper"], port=8080),
+        nulog.ui(port=8080),
         body=nu.ForeverDo(
             nu.kv.Transaction(nulog.getLogger("app").info("tick")) >> nu.Delay(1.5),
         ),
@@ -44,12 +44,6 @@ Live viewer::
 """
 
 from __future__ import annotations
-
-import tempfile
-import uuid
-from typing import TYPE_CHECKING
-
-import nu
 
 from . import messages, metrics
 from .messages import (
@@ -82,15 +76,10 @@ from .ui import (
     ViewerPage,
     build_ui,
 )
+from .presets import store, ui  # noqa: E402  -- rebinds ``ui`` over the submodule
 
 
-if TYPE_CHECKING:
-    from collections.abc import Sequence
-
-    from nu.context import Provide
-
-
-__version__ = "0.7.0"
+__version__ = "0.1.5"
 
 __all__ = [
     "CRITICAL",
@@ -126,48 +115,3 @@ __all__ = [
 ]
 
 
-def _scratch_dir() -> str:
-    """A unique in-memory RocksDB scratch dir under the system temp."""
-    return f"{tempfile.gettempdir()}/nulog-{uuid.uuid4().hex}"
-
-
-def store(path: str | None = None) -> nu.With:
-    """A bracket providing Codec + Observer + storage + Navigator.
-
-    On-disk RocksDB when ``path`` is given (durable); pure in-memory when
-    ``None`` (default -- fresh per call, gone on process exit). Every
-    ``nulog.getLogger(...)`` / ``.info()`` / ``nulog.observe()`` /
-    ``nulog.messages.tail()`` / ... inside the body reads and writes
-    through it.
-    """
-    if path is None:
-        return nu.kv.presets.memory_navigator()
-    return nu.kv.presets.rocksdb_navigator(path)
-
-
-def ui(
-    streams: Sequence[str],
-    series: Sequence[str],
-    *,
-    host: str = "127.0.0.1",
-    port: int = 8080,
-) -> Provide:
-    """Boot the nudle log viewer over the enclosing bracket's store.
-
-    The viewer tree from :func:`~nulog.ui.build_ui` is scope-free; this
-    entrypoint runs an untagged ``nu.kv.auto_flow_atomic`` sweep so a
-    single-store standalone user does not have to think about atomicity.
-    Callers embedding the viewer inside a multi-scope orchestration
-    should call :func:`~nulog.ui.build_ui` directly and wrap themselves
-    with the scopes that match their fabric layout (typically
-    ``scope=Messages`` and ``scope=Metrics``).
-
-    Args:
-        streams: message stream names to offer in the messages tab picker.
-        series: metric series names to offer in the metrics tab picker.
-        host: uvicorn bind address (default ``127.0.0.1``).
-        port: uvicorn bind port (default ``8080``).
-    """
-    tree = build_ui(tuple(streams), tuple(series))
-    tree = nu.kv.auto_flow_atomic(tree)
-    return nu.ui.nudle.server(tree, host=host, port=port)

@@ -22,7 +22,17 @@ from . import consts, shape
 
 
 def repaint() -> nu.Nu:
-    """One repaint pass: refresh the metrics chart with fresh sampled points."""
+    """One repaint pass: refresh the metrics chart with fresh sampled points.
+
+    No-ops (clears the chart) when no series is selected -- an empty series
+    key would break the binary codec's prefix encoding.
+    """
+    empty = shape.MetricsBody.chart.set_points([])
+    return nu.IfDo(nu.Eq(shape.MetricsViewState.series, ""), empty, _repaint_body())
+
+
+def _repaint_body() -> nu.Nu:
+    """The real read-and-write pass. Assumes ``MetricsViewState.series`` is non-empty."""
     now = nu.std.time.time_ns() // 1000
     begin = nu.std.time.time_ns() // 1000 - nu.int(shape.MetricsViewState.window) * 1_000_000
 
@@ -35,7 +45,7 @@ def repaint() -> nu.Nu:
                             consts.SAMPLE_LIMIT,
                             begin,
                             now,
-                        )
+                        ),
                     ),
                     nu.List.of(
                         nu.TupleAttrRef("_nl_mpair")[0],
@@ -44,5 +54,5 @@ def repaint() -> nu.Nu:
                     key="_nl_mpair",
                 ),
             ),
-        )
+        ),
     )

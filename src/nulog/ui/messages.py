@@ -24,7 +24,19 @@ from .interactions import fmt_fields, fmt_ts
 
 
 def repaint() -> nu.Nu:
-    """One repaint pass: refresh the messages table."""
+    """One repaint pass: refresh the messages table.
+
+    No-ops (writes an empty table) when no stream is selected -- an empty
+    stream key would break the binary codec's prefix encoding.
+    """
+    empty = shape.MessagesBody.table.set(
+        nu.Dict.of(columns=list(consts.TABLE_COLUMNS), rows=[]),
+    )
+    return nu.IfDo(nu.Eq(shape.ViewState.stream, ""), empty, _repaint_body())
+
+
+def _repaint_body() -> nu.Nu:
+    """The real read-and-write pass. Assumes ``ViewState.stream`` is non-empty."""
     entries = Messages.streams[shape.ViewState.stream].entries
 
     # Clamp count into [MIN_COUNT, MAX_COUNT] -- browser side already does
