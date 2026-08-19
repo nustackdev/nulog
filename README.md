@@ -5,6 +5,10 @@
   [![Powered by Nu](https://img.shields.io/badge/powered%20by-Nu-5865F2)](https://github.com/nustackdev/nu)
   [![PyPI - Python Version](https://img.shields.io/badge/python-%3E%3D%203.10-blue)](https://pypi.org/project/nulog/)
   [![PyPI Package](https://img.shields.io/pypi/v/nulog?color=yellow)](https://pypi.org/project/nulog/)
+
+  <br/>
+
+  <img src="docs/nulog.gif" alt="nulog demo" width="900"/>
 </div>
 
 <br/>
