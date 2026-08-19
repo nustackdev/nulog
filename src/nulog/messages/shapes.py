@@ -25,14 +25,14 @@ class LogEntry(nu.Shape):
     """One log line -- immutable.
 
     ``ts_us`` is absolute epoch microseconds captured at eval time. ``fields``
-    is a JSON string blob of structured kwargs (decoded on read via
-    :func:`nulog.messages.query.FieldsFromJson`).
+    is a whole-blob dict of structured kwargs, stored opaquely via
+    :class:`~nu.kv.PrimitiveDictRef` (no per-key decomposition).
     """
 
     ts_us: nu.kv.IntRef
     level: nu.kv.StrRef
     msg: nu.kv.StrRef
-    fields: nu.kv.StrRef
+    fields: nu.kv.PrimitiveDictRef[str, object]
 
 
 class MessageStream(nu.Shape):

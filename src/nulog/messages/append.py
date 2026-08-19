@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 
 import nu
 
-from .interactions import fields_as_json, level_name, percent_format
+from .interactions import level_name, percent_format
 from .shapes import Messages
 
 
@@ -36,11 +36,7 @@ def append(
         nu.Dict.of(
             ts_us=nu.std.time.time_ns() // 1000,
             level=level_name(level),
-            msg=percent_format(msg, *args) if args else percent_format(msg),
-            fields=fields_as_json(
-                nu.Dict.of(
-                    **{k: nu.Literal(v) for k, v in (extra or {}).items()},
-                ),
-            ),
+            msg=percent_format(msg, *args),
+            fields=extra or {},
         ),
     )

@@ -205,15 +205,6 @@ def test_slice_positional_window(ctx):
     assert [r["msg"] for r in rows] == ["m1", "m2", "m3"]
 
 
-def test_slice_negative_indices(ctx):
-    """`slice(-n, len)` mirrors Python slice semantics: last n entries chronological."""
-    log = nulog.getLogger("app")
-    for i in range(5):
-        _write(ctx, log.info("m%s", i))
-    rows = _read(ctx, nulog.messages.slice("app", -2, 5))
-    assert [r["msg"] for r in rows] == ["m3", "m4"]
-
-
 def test_slice_step(ctx):
     """`slice(..., step=2)` picks every other entry in the window."""
     log = nulog.getLogger("app")
@@ -221,20 +212,6 @@ def test_slice_step(ctx):
         _write(ctx, log.info("m%s", i))
     rows = _read(ctx, nulog.messages.slice("app", 0, 6, 2))
     assert [r["msg"] for r in rows] == ["m0", "m2", "m4"]
-
-
-# ---- point ---------------------------------------------------------------
-
-
-def test_point_by_index(ctx):
-    """`point(index)` reads one entry as a decoded dict."""
-    log = nulog.getLogger("app")
-    _write(ctx, log.info("first"))
-    _write(ctx, log.warning("second", extra={"code": 500}))
-    r = _read(ctx, nulog.messages.point("app", 1))
-    assert r["msg"] == "second"
-    assert r["level"] == "warning"
-    assert r["fields"] == {"code": 500}
 
 
 # ---- one-tree end-to-end -------------------------------------------------

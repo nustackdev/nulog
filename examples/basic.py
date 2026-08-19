@@ -33,7 +33,6 @@ writes = (
 reads = (
     nu.kv.Snapshot(nu.print("== app: tail(3) ==", nulog.messages.tail("app", 3)))
     >> nu.kv.Snapshot(nu.print("== app: slice(0,3) ==", nulog.messages.slice("app", 0, 3)))
-    >> nu.kv.Snapshot(nu.print("== app: point(1) ==", nulog.messages.point("app", 1)))
     >> nu.kv.Snapshot(nu.print("== scraper: tail(5) ==", nulog.messages.tail("scraper", 5)))
 )
 

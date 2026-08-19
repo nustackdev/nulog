@@ -6,7 +6,7 @@ Core (what a log IS):
 - :mod:`.append`       -- the write-tree primitive (``append(stream, level, msg, ...)``).
 - :mod:`.query`        -- reads (``tail`` / ``slice`` / ``point``).
 - :mod:`.shapes`       -- store layout (``Messages`` / ``MessageStream`` / ``LogEntry``).
-- :mod:`.interactions` -- host atoms + typed seams (``level_name`` / ``percent_format`` / ``fields_as_json``).
+- :mod:`.interactions` -- host atoms + typed seams (``level_name`` / ``percent_format``).
 
 DX (Python-logging-shaped facades):
 - :mod:`.logger`       -- ``Logger`` class + ``getLogger``.
@@ -22,10 +22,10 @@ Types:
 from __future__ import annotations
 
 from .append import append
-from .interactions import fields_as_json, level_name, percent_format
+from .interactions import level_name, percent_format
 from .logger import Logger, getLogger
 from .logger_root import critical, debug, error, info, log, warn, warning
-from .query import FieldsFromJson, point, slice, tail
+from .query import slice, tail
 from .shapes import LogEntry, Messages, MessageStream
 from .std_compat import from_std_logging
 from .types import (
@@ -51,7 +51,6 @@ __all__ = [
     "NOTSET",
     "WARN",
     "WARNING",
-    "FieldsFromJson",
     "LogEntry",
     "Logger",
     "MessageStream",
@@ -60,14 +59,12 @@ __all__ = [
     "critical",
     "debug",
     "error",
-    "fields_as_json",
     "from_std_logging",
     "getLogger",
     "info",
     "level_name",
     "log",
     "percent_format",
-    "point",
     "slice",
     "tail",
     "warn",

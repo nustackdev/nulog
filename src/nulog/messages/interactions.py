@@ -3,14 +3,13 @@
 - ``*Host`` -- bare :func:`nu.factory.host` atoms bound to the Python impl.
   Pure (``deterministic=True``) so the fold gate can constant-fold them
   when their inputs are literals.
-- Typed snake_case wrappers (:func:`level_name`, :func:`percent_format`,
-  :func:`fields_as_json`) -- return a real :class:`~nu.forms.Str` Form so
-  downstream expressions type-infer as strings instead of ``object``.
+- Typed snake_case wrappers (:func:`level_name`, :func:`percent_format`)
+  -- return a real :class:`~nu.forms.Str` Form so downstream expressions
+  type-infer as strings instead of ``object``.
 """
 
 from __future__ import annotations
 
-import json
 from typing import TYPE_CHECKING
 
 from nu.factory import host
@@ -18,30 +17,21 @@ from nu.forms import Str
 
 
 if TYPE_CHECKING:
-    from nu.lang import DictArg, IntArg, StrArg
+    from nu.lang import IntArg, StrArg
 
 
 from .types import _LEVEL_NAMES
 
 
 __all__ = [
-    "FieldsAsJsonHost",
     "LevelNameHost",
     "PercentFormatHost",
-    "fields_as_json",
     "level_name",
     "percent_format",
 ]
 
 
 # --- raw impls (plain Python) ------------------------------------------------
-
-
-def _fields_as_json_impl(fields: dict[str, object]) -> str:
-    """Encode structured fields as a compact JSON string (empty on falsy)."""
-    if not fields:
-        return ""
-    return json.dumps(fields, separators=(",", ":"), default=repr)
 
 
 def _level_name_impl(level: int | str) -> str:
@@ -69,17 +59,11 @@ def _percent_format_impl(msg: str, *args: object) -> str:
 
 # --- raw host atoms (untyped -- factory calls) -------------------------------
 
-FieldsAsJsonHost = host(_fields_as_json_impl, name="FieldsAsJson", deterministic=True)
 LevelNameHost = host(_level_name_impl, name="LevelName", deterministic=True)
 PercentFormatHost = host(_percent_format_impl, name="PercentFormat", deterministic=True)
 
 
 # --- typed wrappers (public) -------------------------------------------------
-
-
-def fields_as_json(fields: DictArg[str, object]) -> Str:
-    """Encode structured fields as a compact JSON string (empty on falsy)."""
-    return Str(FieldsAsJsonHost(fields))
 
 
 def level_name(level: IntArg | StrArg) -> Str:
