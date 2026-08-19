@@ -17,31 +17,18 @@ Server-side filter state lives in :mod:`nu.mem` (dict-backed, process-local):
 - :class:`MetricsViewState` -- metrics tab (series / window).
 
 Neither survives a restart. Log data itself sits under the enclosing
-:mod:`nu.kv` store bracket.
+:mod:`nu.kv` store bracket. Tuning knobs (defaults, option sets, bounds,
+tick pace) live in :mod:`.consts`.
 """
 
 from __future__ import annotations
 
 import nu
 
-from ..messages.types import LEVELS
+from . import consts
 
 
 __all__ = [
-    "DEFAULT_COUNT",
-    "DEFAULT_LEVEL",
-    "DEFAULT_MODE",
-    "DEFAULT_WINDOW",
-    "LEVEL_OPTIONS",
-    "MAX_COUNT",
-    "MIN_COUNT",
-    "MODE_OPTIONS",
-    "MODE_TAIL",
-    "MODE_TAKE",
-    "SAMPLE_LIMIT",
-    "TABLE_COLUMNS",
-    "TICK_SECONDS",
-    "WINDOW_OPTIONS",
     "CountField",
     "FilterField",
     "FiltersRow",
@@ -58,51 +45,6 @@ __all__ = [
     "ViewerTabs",
     "WindowField",
 ]
-
-
-# ---- messages tab constants ---------------------------------------------
-
-TABLE_COLUMNS: tuple[str, ...] = ("time", "level", "message", "fields")
-DEFAULT_LEVEL = "all"
-LEVEL_OPTIONS: tuple[str, ...] = (DEFAULT_LEVEL, *LEVELS)
-
-MODE_TAIL = "tail"
-MODE_TAKE = "take"
-MODE_OPTIONS: tuple[dict[str, str], ...] = (
-    {"value": MODE_TAIL, "label": "tail (newest)"},
-    {"value": MODE_TAKE, "label": "take (oldest)"},
-)
-DEFAULT_MODE = MODE_TAIL
-
-# Hard bounds on the requested slice size. The min stops zero / negative
-# reads; the max is a safety cap so a big number in the count field can't
-# balloon a single repaint. Both are enforced browser-side by
-# ``NumberInputRef`` and server-side by clamp expressions in the read.
-MIN_COUNT = 1
-MAX_COUNT = 10_000
-DEFAULT_COUNT = 200
-
-
-# ---- metrics tab constants ----------------------------------------------
-
-# Values are seconds-as-strings so ``SelectRef`` (which speaks strings)
-# can round-trip them; labels are the human form.
-WINDOW_OPTIONS: tuple[dict[str, str], ...] = (
-    {"value": "60", "label": "1m"},
-    {"value": "300", "label": "5m"},
-    {"value": "900", "label": "15m"},
-    {"value": "3600", "label": "1h"},
-)
-DEFAULT_WINDOW = "300"
-# Cap on the number of sampled points fed into a chart per repaint. Matches
-# nudle's default ``LineChart.max_points`` and keeps the wire payload small
-# at billion-entry scale (~2 * SAMPLE_LIMIT kh57 reads per repaint).
-SAMPLE_LIMIT = 500
-
-
-# ---- global tick pace ---------------------------------------------------
-
-TICK_SECONDS = 1.0
 
 
 # ---- viewer state (nu.mem -- transient, not persisted) --------------------
@@ -126,10 +68,6 @@ class MetricsViewState(nu.Shape):
 
 
 # ---- labeled input wrappers --------------------------------------------
-#
-# One :class:`nu.ui.Field` per control gives each input a visible
-# ``label`` above it -- the whole point of this pass. Access the wrapped
-# control via ``<Field>.control`` (e.g. ``StreamField.control.set(...)``).
 
 
 class StreamField(nu.ui.Field):
@@ -142,8 +80,8 @@ class ModeField(nu.ui.Field):
     """Tail vs take switch (which end of the stream to read)."""
 
     control = nu.ui.RadioGroupRef.slot(
-        options=list(MODE_OPTIONS),
-        selected=DEFAULT_MODE,
+        options=list(consts.MODE_OPTIONS),
+        selected=consts.DEFAULT_MODE,
     )
 
 
@@ -151,10 +89,10 @@ class CountField(nu.ui.Field):
     """How many entries the mode reads."""
 
     control = nu.ui.NumberInputRef.slot(
-        min=float(MIN_COUNT),
-        max=float(MAX_COUNT),
+        min=float(consts.MIN_COUNT),
+        max=float(consts.MAX_COUNT),
         step=10.0,
-        default=float(DEFAULT_COUNT),
+        default=float(consts.DEFAULT_COUNT),
     )
 
 
@@ -162,8 +100,8 @@ class LevelField(nu.ui.Field):
     """Level filter, applied inside the tail / take slice."""
 
     control = nu.ui.SelectRef.slot(
-        options=list(LEVEL_OPTIONS),
-        selected=DEFAULT_LEVEL,
+        options=list(consts.LEVEL_OPTIONS),
+        selected=consts.DEFAULT_LEVEL,
     )
 
 
@@ -183,8 +121,8 @@ class WindowField(nu.ui.Field):
     """Time-window picker for the metrics chart."""
 
     control = nu.ui.SelectRef.slot(
-        options=list(WINDOW_OPTIONS),
-        selected=DEFAULT_WINDOW,
+        options=list(consts.WINDOW_OPTIONS),
+        selected=consts.DEFAULT_WINDOW,
     )
 
 
@@ -198,7 +136,7 @@ class FiltersRow(nu.ui.Row):
     mode = ModeField.slot(label="mode")
     count = CountField.slot(
         label="count",
-        help=f"{MIN_COUNT}..{MAX_COUNT} entries; slice cost is O(count).",
+        help=f"{consts.MIN_COUNT}..{consts.MAX_COUNT} entries; slice cost is O(count).",
     )
     level = LevelField.slot(label="level")
     filter = FilterField.slot(

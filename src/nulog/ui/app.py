@@ -8,13 +8,8 @@
 - hydrates the chrome for both tabs (option lists, radio choices, count
   bounds) -- labels themselves come from each :class:`~nu.ui.Field`
   subclass's ``label`` ClassVar,
-- races a live tick (repaint every :data:`~.shape.TICK_SECONDS`) against
+- races a live tick (repaint every :data:`~.consts.TICK_SECONDS`) against
   reactives for each filter input.
-
-Each tick repaints both the messages table and the metrics chart. The
-whole tree runs under a ``nu.Provide(dict, {}, ...)`` bracket that carries
-the in-memory fabric for the view states -- log persistence stays under
-the enclosing :mod:`nu.kv` store bracket.
 """
 
 from __future__ import annotations
@@ -23,26 +18,7 @@ from typing import TYPE_CHECKING
 
 import nu
 
-from . import messages as _messages
-from . import metrics as _metrics
-from .shape import (
-    DEFAULT_COUNT,
-    DEFAULT_LEVEL,
-    DEFAULT_MODE,
-    DEFAULT_WINDOW,
-    TICK_SECONDS,
-    CountField,
-    FilterField,
-    LevelField,
-    MetricsViewState,
-    ModeField,
-    SeriesField,
-    StreamField,
-    ViewerIndex,
-    ViewerPage,
-    ViewState,
-    WindowField,
-)
+from . import consts, messages, metrics, shape
 
 
 if TYPE_CHECKING:
@@ -56,20 +32,19 @@ def _seed_messages(streams: Sequence[str]) -> nu.Nu:
     """Seed the messages ViewState to defaults (first stream, tail mode)."""
     first_stream = streams[0] if streams else ""
     return (
-        ViewState.stream.set(first_stream)
-        >> ViewState.mode.set(DEFAULT_MODE)
-        >> ViewState.count.set(DEFAULT_COUNT)
-        >> ViewState.level.set(DEFAULT_LEVEL)
-        >> ViewState.filter.set("")
+        shape.ViewState.stream.set(first_stream)
+        >> shape.ViewState.mode.set(consts.DEFAULT_MODE)
+        >> shape.ViewState.count.set(consts.DEFAULT_COUNT)
+        >> shape.ViewState.level.set(consts.DEFAULT_LEVEL)
+        >> shape.ViewState.filter.set("")
     )
 
 
 def _seed_metrics(series: Sequence[str]) -> nu.Nu:
     """Seed the metrics ViewState to defaults (first series, default window)."""
     first_series = series[0] if series else ""
-    return (
-        MetricsViewState.series.set(first_series)
-        >> MetricsViewState.window.set(DEFAULT_WINDOW)
+    return shape.MetricsViewState.series.set(first_series) >> shape.MetricsViewState.window.set(
+        consts.DEFAULT_WINDOW
     )
 
 
@@ -81,9 +56,8 @@ def _hydrate_messages_chrome(streams: Sequence[str]) -> nu.Nu:
     """
     first_stream = streams[0] if streams else ""
     stream_opts = list(streams) or [first_stream]
-    return (
-        StreamField.control.set_options(stream_opts)
-        | StreamField.control.set(first_stream)
+    return shape.StreamField.control.set_options(stream_opts) | shape.StreamField.control.set(
+        first_stream
     )
 
 
@@ -94,39 +68,33 @@ def _hydrate_metrics_chrome(series: Sequence[str]) -> nu.Nu:
     """
     first_series = series[0] if series else ""
     series_opts = list(series) or [first_series]
-    return (
-        SeriesField.control.set_options(series_opts)
-        | SeriesField.control.set(first_series)
+    return shape.SeriesField.control.set_options(series_opts) | shape.SeriesField.control.set(
+        first_series
     )
 
 
 def _messages_reactives() -> nu.Nu:
     """One ``ReactForever`` per messages-tab control -- mirror + repaint."""
     on_stream = nu.ReactForever(
-        StreamField.control.changed(),
-        ViewState.stream.set(StreamField.control)
-        >> _messages._repaint(),
+        shape.StreamField.control.changed(),
+        shape.ViewState.stream.set(shape.StreamField.control) >> messages.repaint(),
     )
     on_mode = nu.ReactForever(
-        ModeField.control.changed(),
-        ViewState.mode.set(ModeField.control)
-        >> _messages._repaint(),
+        shape.ModeField.control.changed(),
+        shape.ViewState.mode.set(shape.ModeField.control) >> messages.repaint(),
     )
     on_count = nu.ReactForever(
-        CountField.control.changed(),
+        shape.CountField.control.changed(),
         # NumberInputRef ships a float; cast to int for the slice math.
-        ViewState.count.set(nu.ToInt(CountField.control))
-        >> _messages._repaint(),
+        shape.ViewState.count.set(nu.ToInt(shape.CountField.control)) >> messages.repaint(),
     )
     on_level = nu.ReactForever(
-        LevelField.control.changed(),
-        ViewState.level.set(LevelField.control)
-        >> _messages._repaint(),
+        shape.LevelField.control.changed(),
+        shape.ViewState.level.set(shape.LevelField.control) >> messages.repaint(),
     )
     on_filter = nu.ReactForever(
-        FilterField.control.changed(),
-        ViewState.filter.set(FilterField.control)
-        >> _messages._repaint(),
+        shape.FilterField.control.changed(),
+        shape.ViewState.filter.set(shape.FilterField.control) >> messages.repaint(),
     )
     return on_stream | on_mode | on_count | on_level | on_filter
 
@@ -134,14 +102,12 @@ def _messages_reactives() -> nu.Nu:
 def _metrics_reactives() -> nu.Nu:
     """One ``ReactForever`` per metrics-tab control -- mirror + repaint."""
     on_series = nu.ReactForever(
-        SeriesField.control.changed(),
-        MetricsViewState.series.set(SeriesField.control)
-        >> _metrics._repaint(),
+        shape.SeriesField.control.changed(),
+        shape.MetricsViewState.series.set(shape.SeriesField.control) >> metrics.repaint(),
     )
     on_window = nu.ReactForever(
-        WindowField.control.changed(),
-        MetricsViewState.window.set(WindowField.control)
-        >> _metrics._repaint(),
+        shape.WindowField.control.changed(),
+        shape.MetricsViewState.window.set(shape.WindowField.control) >> metrics.repaint(),
     )
     return on_series | on_window
 
@@ -192,18 +158,18 @@ def build_ui(
     reactive_parts: list[nu.Nu] = []
 
     if heading is not None:
-        chrome_parts.append(ViewerPage.heading.set(heading, level=2))
+        chrome_parts.append(shape.ViewerPage.heading.set(heading, level=2))
 
     if messages_tab:
         seeds.append(_seed_messages(streams))
         chrome_parts.append(_hydrate_messages_chrome(streams))
-        tick_parts.append(_messages._repaint())
+        tick_parts.append(messages.repaint())
         reactive_parts.append(_messages_reactives())
 
     if metrics_tab:
         seeds.append(_seed_metrics(series))
         chrome_parts.append(_hydrate_metrics_chrome(series))
-        tick_parts.append(_metrics._repaint())
+        tick_parts.append(metrics.repaint())
         reactive_parts.append(_metrics_reactives())
 
     seed_body = seeds[0]
@@ -217,7 +183,7 @@ def build_ui(
     tick_body = tick_parts[0]
     for t in tick_parts[1:]:
         tick_body = tick_body | t
-    tick = nu.ForeverDo(tick_body >> nu.Delay(nu.Literal(TICK_SECONDS)))
+    tick = nu.ForeverDo(tick_body >> nu.Delay(nu.Literal(consts.TICK_SECONDS)))
 
     reactives = tick
     for r in reactive_parts:
@@ -225,7 +191,7 @@ def build_ui(
 
     body: nu.Nu = seed_body >> chrome_body
     if title is not None:
-        body = ViewerIndex.title.set(title) >> body
+        body = shape.ViewerIndex.title.set(title) >> body
     body = body >> reactives
 
     return nu.Provide(dict, {}, body)

@@ -1,12 +1,13 @@
 """Browser log viewer -- one nudle Page with two tabs, one Nu tree.
 
-Split across four files:
+Split across five files:
 
+- :mod:`.consts` -- tuning knobs: defaults, option sets, bounds, tick pace.
 - :mod:`.shape` -- view states (:class:`ViewState`, :class:`MetricsViewState`)
   and display shapes (labeled :class:`~nu.ui.Field` wrappers,
   :class:`FiltersRow` / :class:`MetricsPickers`, :class:`MessagesBody` /
   :class:`MetricsBody`, :class:`ViewerTabs`, :class:`ViewerPage`,
-  :class:`ViewerIndex`) + layout constants.
+  :class:`ViewerIndex`).
 - :mod:`.messages` -- messages tab: bounded slice (tail / take) +
   in-window level / substring predicates + table payload, plus the
   value-only ``@nu.host`` formatters.
@@ -20,8 +21,7 @@ from __future__ import annotations
 
 from . import messages, metrics
 from .app import build_ui
-from .messages import FmtFields, FmtTs, RowAsList
-from .shape import (
+from .consts import (
     DEFAULT_COUNT,
     DEFAULT_LEVEL,
     DEFAULT_MODE,
@@ -36,6 +36,9 @@ from .shape import (
     TABLE_COLUMNS,
     TICK_SECONDS,
     WINDOW_OPTIONS,
+)
+from .interactions import fmt_fields, fmt_ts
+from .shape import (
     CountField,
     FilterField,
     FiltersRow,
@@ -72,14 +75,11 @@ __all__ = [
     "CountField",
     "FilterField",
     "FiltersRow",
-    "FmtFields",
-    "FmtTs",
     "LevelField",
     "MessagesBody",
     "MetricsBody",
     "MetricsViewState",
     "ModeField",
-    "RowAsList",
     "SeriesField",
     "StreamField",
     "ViewState",
@@ -88,6 +88,8 @@ __all__ = [
     "ViewerTabs",
     "WindowField",
     "build_ui",
+    "fmt_fields",
+    "fmt_ts",
     "messages",
     "metrics",
 ]

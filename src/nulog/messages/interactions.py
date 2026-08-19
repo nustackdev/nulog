@@ -10,15 +10,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-from nu.factory import host
-from nu.forms import Str
-
-
-if TYPE_CHECKING:
-    from nu.lang import IntArg, StrArg
-
+import nu
 
 from .types import _LEVEL_NAMES
 
@@ -59,18 +51,18 @@ def _percent_format_impl(msg: str, *args: object) -> str:
 
 # --- raw host atoms (untyped -- factory calls) -------------------------------
 
-LevelNameHost = host(_level_name_impl, name="LevelName", deterministic=True)
-PercentFormatHost = host(_percent_format_impl, name="PercentFormat", deterministic=True)
+LevelNameHost = nu.host(_level_name_impl, name="LevelName", deterministic=True)
+PercentFormatHost = nu.host(_percent_format_impl, name="PercentFormat", deterministic=True)
 
 
 # --- typed wrappers (public) -------------------------------------------------
 
 
-def level_name(level: IntArg | StrArg) -> Str:
+def level_name(level: nu.IntArg | nu.StrArg) -> nu.Str:
     """Normalize a level (int or name) into the canonical lowercase name."""
-    return Str(LevelNameHost(level))
+    return nu.Str(LevelNameHost(level))
 
 
-def percent_format(msg: StrArg, *args: object) -> Str:
+def percent_format(msg: nu.StrArg, *args: object) -> nu.Str:
     """``msg % args`` at eval time, mirroring ``logging.LogRecord.getMessage``."""
-    return Str(PercentFormatHost(msg, *args))
+    return nu.Str(PercentFormatHost(msg, *args))

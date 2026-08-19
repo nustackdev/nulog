@@ -1,9 +1,9 @@
 """Metrics tab reads -- kh57-sampled ``[ts_us, value]`` points for the chart.
 
-The tick calls :func:`_repaint`; that returns a Nu store command whose
+The tick calls :func:`repaint`; that returns a Nu store command whose
 payload is a sample of the selected series over the selected window
 (``now_us - window_us .. now_us``). Kh57's range reservoir gives us at
-most :data:`~.shape.SAMPLE_LIMIT` points at ~2N read cost regardless of
+most :data:`~.consts.SAMPLE_LIMIT` points at ~2N read cost regardless of
 how many points sit in the window -- billion-entry safe.
 
 Cost analysis: reservoir sampling walks the shifted-key index for the
@@ -15,46 +15,34 @@ stays flat-cost as a series grows.
 from __future__ import annotations
 
 import nu
-import nu.std.time as _nu_time
 
-from ..metrics.shapes import Metrics
-from .shape import SAMPLE_LIMIT, MetricsBody, MetricsViewState
+from nulog.metrics import Metrics
 
-
-__all__ = ["XYPair"]
+from . import consts, shape
 
 
-_PAIR = nu.AnyAttrRef("_nl_mpair")
-_KEY = nu.GetItem(_PAIR, 0)
-_VALUE = nu.GetItem(nu.GetItem(_PAIR, 1), "value")
-
-
-@nu.host
-def XYPair(x: int, y: float) -> list:  # noqa: N802
-    """Two-element positional row for :class:`nu.ui.LineChart`."""
-    return [x, y]
-
-
-def _now_us() -> nu.Nu:
-    """Absolute epoch microseconds at eval time."""
-    return _nu_time.time_ns() // 1000
-
-
-def _window_us() -> nu.Nu:
-    """The currently-selected window in microseconds (parsed from ``MetricsViewState.window``)."""
-    return nu.Mul(nu.ToInt(MetricsViewState.window), nu.Literal(1_000_000))
-
-
-def _chart_points() -> nu.Nu:
-    """``[[ts_us, value], ...]`` sorted by ts, sampled from the selected series."""
-    now = _now_us()
-    begin = nu.Sub(now, _window_us())
-    pairs = Metrics.series[MetricsViewState.series].points.sample(SAMPLE_LIMIT, begin, now)
-    return nu.Collect(
-        nu.Sorted(nu.Map(nu.Iter(pairs), XYPair(_KEY, _VALUE), key="_nl_mpair")),
-    )
-
-
-def _repaint() -> nu.Nu:
+def repaint() -> nu.Nu:
     """One repaint pass: refresh the metrics chart with fresh sampled points."""
-    return MetricsBody.chart.set_points(_chart_points())
+    now = nu.std.time.time_ns() // 1000
+    begin = nu.std.time.time_ns() // 1000 - nu.int(shape.MetricsViewState.window) * 1_000_000
+
+    return shape.MetricsBody.chart.set_points(
+        nu.Collect(
+            nu.Sorted(
+                nu.Map(
+                    nu.Iter(
+                        Metrics.series[shape.MetricsViewState.series].points.sample(
+                            consts.SAMPLE_LIMIT,
+                            begin,
+                            now,
+                        )
+                    ),
+                    nu.List.of(
+                        nu.TupleAttrRef("_nl_mpair")[0],
+                        nu.dict(nu.TupleAttrRef("_nl_mpair")[1])["value"],
+                    ),
+                    key="_nl_mpair",
+                ),
+            ),
+        )
+    )

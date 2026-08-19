@@ -20,16 +20,10 @@ predicates live in this module -- this is not Elasticsearch.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import nu
 
 from .interactions import level_name, percent_format
 from .shapes import Messages
-
-
-if TYPE_CHECKING:
-    from nu.lang import IntArg, StrArg
 
 
 __all__ = [
@@ -43,11 +37,11 @@ __all__ = [
 
 
 def append(
-    stream: StrArg,
-    level: IntArg | StrArg,
-    msg: StrArg,
+    stream: nu.StrArg,
+    level: nu.IntArg | nu.StrArg,
+    msg: nu.StrArg,
     args: tuple[object, ...],
-    extra: dict[str, object] | None,
+    extra: nu.DictArg[str, object] | None,
 ) -> nu.Nu:
     """Build the Command tree that appends one entry to ``stream``."""
     return Messages.streams[stream].entries.set_item(
@@ -64,7 +58,7 @@ def append(
 # --- read ------------------------------------------------------------------
 
 
-def _row_from(item_key: str) -> nu.Nu:
+def _row_from(item_key: nu.StrArg) -> nu.Nu:
     """The ``{ts_us, level, msg, fields}`` row projected off ``item_key``."""
     return nu.Dict.of(
         ts_us=nu.AnyAttrRef(item_key)["ts_us"],
@@ -74,7 +68,7 @@ def _row_from(item_key: str) -> nu.Nu:
     )
 
 
-def tail(stream: StrArg, n: IntArg) -> nu.Nu:
+def tail(stream: nu.StrArg, n: nu.IntArg) -> nu.Nu:
     """The newest ``n`` entries of ``stream``, newest-first.
 
     O(n) via a bounded reverse-cursor scan over ``__keys__/`` -- reads
@@ -90,10 +84,10 @@ def tail(stream: StrArg, n: IntArg) -> nu.Nu:
 
 
 def slice(
-    stream: StrArg,
-    start: IntArg,
-    stop: IntArg,
-    step: IntArg = 1,
+    stream: nu.StrArg,
+    start: nu.IntArg,
+    stop: nu.IntArg,
+    step: nu.IntArg = 1,
 ) -> nu.Nu:
     """Positional forward slice of ``stream``: ``islice(entries, start, stop, step)``.
 

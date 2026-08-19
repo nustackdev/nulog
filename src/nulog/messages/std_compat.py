@@ -25,17 +25,11 @@ Usage::
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from typing import cast
 
-from nu.core import Literal
-from nu.std.logging import Log
-from nu.tree import map_nodes
+import nu
 
 from .ops import append
-
-
-if TYPE_CHECKING:
-    import nu
 
 
 __all__ = [
@@ -45,7 +39,7 @@ __all__ = [
 
 def _literal_value(term: nu.Nu) -> object | nu.Nu:
     """Return the Python value if ``term`` is a ``Literal``, else the term."""
-    if isinstance(term, Literal):
+    if isinstance(term, nu.Literal):
         return term._payload.get("value")
     return term
 
@@ -59,7 +53,7 @@ def from_std_logging(tree: nu.Nu) -> nu.Nu:
     """
 
     def _rewrite(node: nu.Nu) -> nu.Nu:
-        if not isinstance(node, Log):
+        if not isinstance(node, nu.std.logging.Log):
             return node
 
         # Log children: [LOGGING, level, logger, msg, *args].
@@ -73,4 +67,4 @@ def from_std_logging(tree: nu.Nu) -> nu.Nu:
 
         return append(stream, level, msg, args, extra)
 
-    return map_nodes(tree, _rewrite, order="bottom_up")
+    return nu.tree.map_nodes(tree, _rewrite, order="bottom_up")

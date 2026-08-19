@@ -62,9 +62,9 @@ def observe(name: nu.StrArg, value: nu.FloatArg, *, ts: nu.FloatArg | None = Non
 
 
 def range(
-    name: str,
-    begin: int | nu.Nu,
-    end: int | nu.Nu,
+    name: nu.StrArg,
+    begin: nu.IntArg,
+    end: nu.IntArg,
 ) -> nu.Nu:
     """Every point in ``name`` with kh57 key in ``[begin, end)``, key-ordered.
 
@@ -87,10 +87,10 @@ def range(
 
 
 def sample(
-    name: str,
-    n: int | nu.Nu,
-    begin: int | nu.Nu | None = None,
-    end: int | nu.Nu | None = None,
+    name: nu.StrArg,
+    n: nu.IntArg,
+    begin: nu.IntArg | None = None,
+    end: nu.IntArg | None = None,
 ) -> nu.Nu:
     """Up to ``n`` kh57-sampled points from ``name`` in ``[begin, end)``.
 
