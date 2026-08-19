@@ -31,7 +31,7 @@ from nu.core import Literal
 from nu.std.logging import Log
 from nu.tree import map_nodes
 
-from .append import append
+from .ops import append
 
 
 if TYPE_CHECKING:

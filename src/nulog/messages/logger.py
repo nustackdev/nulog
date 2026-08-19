@@ -1,6 +1,15 @@
-"""Bound :class:`Logger` -- the class-based write surface.
+"""Python-``logging``-shaped facades over :func:`.ops.append`.
 
-Mirrors ``nu.std.logging.Logger`` / ``logging.Logger``::
+Two surfaces, one wire underneath:
+
+- :class:`Logger` + :func:`getLogger` -- the bound class-based surface. The
+  logger *name* IS the stream name; each method returns a Nu Command tree
+  carrying that name.
+- Module-level :func:`info` / :func:`debug` / :func:`log` / ... -- one-off
+  writes to the ``root`` stream, mirroring ``logging.info`` and friends.
+
+Both fan into :func:`.ops.append` on
+``Messages.streams[name].entries``::
 
     from nulog import getLogger
 
@@ -11,17 +20,13 @@ Mirrors ``nu.std.logging.Logger`` / ``logging.Logger``::
         >> log.warning("cache miss for %s", key)
         >> log.error("checkout failed", extra={"code": 500})
     )
-
-The logger *name* IS the stream name.
-Every ``log.info(...)`` compiles to one :func:`.append.append` on
-``Messages.streams[name].entries``.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from .append import append
+from .ops import append
 from .types import CRITICAL, DEBUG, ERROR, INFO, WARNING
 
 
@@ -32,7 +37,14 @@ if TYPE_CHECKING:
 
 __all__ = [
     "Logger",
+    "critical",
+    "debug",
+    "error",
     "getLogger",
+    "info",
+    "log",
+    "warn",
+    "warning",
 ]
 
 
@@ -95,3 +107,46 @@ class Logger:
 def getLogger(name: str | None = None) -> Logger:  # noqa: N802
     """Return a bound :class:`Logger`. Mirrors ``logging.getLogger``."""
     return Logger(name if name is not None else "root")
+
+
+# --- module-level root-stream facade --------------------------------------
+
+_root = Logger("root")
+
+
+def debug(msg: StrArg, *args: object, extra: dict[str, object] | None = None) -> nu.Nu:
+    """Root-stream DEBUG entry. Mirrors ``logging.debug``."""
+    return _root.debug(msg, *args, extra=extra)
+
+
+def info(msg: StrArg, *args: object, extra: dict[str, object] | None = None) -> nu.Nu:
+    """Root-stream INFO entry. Mirrors ``logging.info``."""
+    return _root.info(msg, *args, extra=extra)
+
+
+def warning(msg: StrArg, *args: object, extra: dict[str, object] | None = None) -> nu.Nu:
+    """Root-stream WARNING entry. Mirrors ``logging.warning``."""
+    return _root.warning(msg, *args, extra=extra)
+
+
+warn = warning
+
+
+def error(msg: StrArg, *args: object, extra: dict[str, object] | None = None) -> nu.Nu:
+    """Root-stream ERROR entry. Mirrors ``logging.error``."""
+    return _root.error(msg, *args, extra=extra)
+
+
+def critical(msg: StrArg, *args: object, extra: dict[str, object] | None = None) -> nu.Nu:
+    """Root-stream CRITICAL entry. Mirrors ``logging.critical``."""
+    return _root.critical(msg, *args, extra=extra)
+
+
+def log(
+    level: IntArg | StrArg,
+    msg: StrArg,
+    *args: object,
+    extra: dict[str, object] | None = None,
+) -> nu.Nu:
+    """Root-stream entry at ``level``. Mirrors ``logging.log``."""
+    return _root.log(level, msg, *args, extra=extra)

@@ -3,14 +3,13 @@
 Module layout:
 
 Core (what a log IS):
-- :mod:`.append`       -- the write-tree primitive (``append(stream, level, msg, ...)``).
-- :mod:`.query`        -- reads (``tail`` / ``slice`` / ``point``).
 - :mod:`.shapes`       -- store layout (``Messages`` / ``MessageStream`` / ``LogEntry``).
 - :mod:`.interactions` -- host atoms + typed seams (``level_name`` / ``percent_format``).
+- :mod:`.ops`          -- write + read primitives (``append`` / ``tail`` / ``slice``).
 
 DX (Python-logging-shaped facades):
-- :mod:`.logger`       -- ``Logger`` class + ``getLogger``.
-- :mod:`.logger_root`  -- module-level root facade (``info`` / ``debug`` / ``log`` / ...).
+- :mod:`.logger`       -- ``Logger`` class + ``getLogger`` + module-level root facade
+  (``info`` / ``debug`` / ``log`` / ...).
 
 std compat:
 - :mod:`.std_compat`   -- ``from_std_logging`` rewrites ``nu.std.logging`` atoms into persistent writes.
@@ -21,11 +20,19 @@ Types:
 
 from __future__ import annotations
 
-from .append import append
 from .interactions import level_name, percent_format
-from .logger import Logger, getLogger
-from .logger_root import critical, debug, error, info, log, warn, warning
-from .query import slice, tail
+from .logger import (
+    Logger,
+    critical,
+    debug,
+    error,
+    getLogger,
+    info,
+    log,
+    warn,
+    warning,
+)
+from .ops import append, slice, tail
 from .shapes import LogEntry, Messages, MessageStream
 from .std_compat import from_std_logging
 from .types import (

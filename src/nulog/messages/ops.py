@@ -1,15 +1,17 @@
-"""Log-stream reads -- two primitives.
+"""Read + write primitives over the message store.
+
+Write:
+- :func:`append` -- the write-tree primitive. Every logger method, every
+  ``std_compat`` rewrite, every direct write funnels through here.
+
+Read:
+- :func:`tail`  -- newest N, newest-first. O(n) via a bounded reverse-cursor
+  scan (``reversed_values``), safe against arbitrarily large streams.
+- :func:`slice` -- forward ``islice`` over ``.values()``. O(``stop``), no
+  full-stream materialization. Non-negative bounds only; for "last N",
+  use :func:`tail`.
 
 Rows: ``{"ts_us": int, "level": str, "msg": str, "fields": dict}``.
-
-The message store is a :class:`LogIndexedDictView` (multi-writer-safe append
-log). Its ``__keys__/`` sibling holds chronological order, so:
-
-- :func:`tail` uses a bounded reverse-cursor scan (``reversed_values``) --
-  O(n) in the *result*, safe against arbitrarily large streams.
-- :func:`slice` is a forward ``islice`` over ``.values()`` -- O(stop) walks,
-  no full-stream materialization. Non-negative bounds only; for "last N"
-  use :func:`tail`.
 
 Callers who want level or substring filtering do it *outside* the read
 (``[r for r in rows if r["level"] == "error"]``). No index-less full-scan
@@ -22,6 +24,7 @@ from typing import TYPE_CHECKING
 
 import nu
 
+from .interactions import level_name, percent_format
 from .shapes import Messages
 
 
@@ -30,9 +33,35 @@ if TYPE_CHECKING:
 
 
 __all__ = [
+    "append",
     "slice",
     "tail",
 ]
+
+
+# --- write -----------------------------------------------------------------
+
+
+def append(
+    stream: StrArg,
+    level: IntArg | StrArg,
+    msg: StrArg,
+    args: tuple[object, ...],
+    extra: dict[str, object] | None,
+) -> nu.Nu:
+    """Build the Command tree that appends one entry to ``stream``."""
+    return Messages.streams[stream].entries.set_item(
+        nu.std.uuid.uuid4().hex(),
+        nu.Dict.of(
+            ts_us=nu.std.time.time_ns() // 1000,
+            level=level_name(level),
+            msg=percent_format(msg, *args),
+            fields=extra or {},
+        ),
+    )
+
+
+# --- read ------------------------------------------------------------------
 
 
 def _row_from(item_key: str) -> nu.Nu:
