@@ -36,7 +36,7 @@ reads = (
     >> nu.kv.Snapshot(nu.print("== scraper: tail(5) ==", nulog.messages.tail("scraper", 5)))
 )
 
-tree = nu.With(nulog.store(), body=nu.kv.Transaction(writes) >> reads)
+tree = nu.With(nulog.store("basic.db"), body=nu.kv.Transaction(writes) >> reads)
 
 
 if __name__ == "__main__":

@@ -67,6 +67,7 @@ from .messages import (
     warn,
     warning,
 )
+from .client import Client, init
 from .metrics import observe
 from .ui import (
     DEFAULT_LEVEL,
@@ -76,7 +77,7 @@ from .ui import (
     ViewerPage,
     build_ui,
 )
-from .presets import store, ui  # noqa: E402  -- rebinds ``ui`` over the submodule
+from .presets import store, store_ro, ui, viewer  # noqa: E402  -- rebinds ``ui`` over the submodule
 
 
 __version__ = "0.1.5"
@@ -94,6 +95,7 @@ __all__ = [
     "TABLE_COLUMNS",
     "WARN",
     "WARNING",
+    "Client",
     "Logger",
     "ViewerIndex",
     "ViewerPage",
@@ -104,12 +106,15 @@ __all__ = [
     "from_std_logging",
     "getLogger",
     "info",
+    "init",
     "log",
     "messages",
     "metrics",
     "observe",
     "store",
+    "store_ro",
     "ui",
+    "viewer",
     "warn",
     "warning",
 ]

@@ -1,50 +1,96 @@
-# nulog
+<div align="center">
+  <h1>nulog</h1>
+  <h3>Ultra-lightweight, Nu-native logger for infinite-scale streams</h3>
 
-Logging + metrics as a Nu app. Append-only logs and kh57-backed metric series
-kept in `nu.kv`, written and read in Nu. Every write is a Nu Command; every
-read is a Nu Query.
+  [![PyPI - Python Version](https://img.shields.io/badge/python-%3E%3D%203.10-blue)](https://pypi.org/project/nulog/)
+  [![PyPI Package](https://img.shields.io/pypi/v/nulog?color=yellow)](https://pypi.org/project/nulog/)
+  [![Powered by Nu](https://img.shields.io/badge/powered%20by-Nu-5865F2)](https://github.com/nustackdev/nu)
+</div>
+
+<br/>
+
+- Append-only logs and metric series in one library.
+- Billions of entries per stream, reads stay fast at any size.
+- Live browser dashboard, zero setup.
+- Filter and sample any stream from the UI.
+
+## Installation
+
+Requires Python 3.10+.
+
+```bash
+pip install nulog
+```
 
 ## Usage
 
-Everything happens inside a `nulog.store(...)` bracket. Writes are Nu
-Commands, reads are Nu Queries that yield `list[dict]` or `dict[str, int]`.
+Two flavors of the same store - pick whichever fits the call site.
+
+### Plain Python
+
+```python
+import nulog
+
+log = nulog.init("logs.db")  # `with nulog.init() as log:` works too.
+
+log.info("server started", stream="app", extra={"port": 8080})
+log.warning("cache miss", stream="app", extra={"key": "user:42"})
+log.error("request failed", stream="app", extra={"path": "/checkout"})
+log.observe("cpu_load", 0.42)
+
+print(log.tail("app", 3))
+print(log.sample("cpu_load", 10))
+
+log.close()
+```
+
+### Native Nu
 
 ```python
 import nu, nulog
 
+app = nulog.getLogger("app")
+
 tree = nu.With(nulog.store(),
     body=nu.kv.Transaction(
-        nulog.info("app", "server started", port=8080)
-        >> nulog.warn("app", "cache miss", key="user:42")
-        >> nulog.error("app", "request failed", path="/checkout", code=500)
-        >> nulog.observe("cpu_load", 0.42)
+        app.info("server started", extra={"port": 8080})
+        >> app.warning("cache miss", extra={"key": "user:42"})
+        >> app.error("request failed", extra={"path": "/checkout"})
+        >> nulog.observe("cpu_load", 0.42),
     )
-    >> nu.kv.Snapshot(nu.print("tail:", nulog.tail("app", 3)))
-    >> nu.kv.Snapshot(nu.print("errors:", nulog.errors("app")))
-    >> nu.kv.Snapshot(nu.print("count:", nulog.count_by_level("app"))),
+    >> nu.kv.Snapshot(nu.print("tail:", nulog.messages.tail("app", 3)))
+    >> nu.kv.Snapshot(nu.print("cpu:", nulog.metrics.sample("cpu_load", 10))),
 )
 
 nu.run(tree)
 ```
 
-Read atoms cover the search space:
+Read atoms both flavors expose:
 
-- Logs: `tail(stream, n)`, `head(stream, n)`, `by_level(stream, level)`,
-  `errors(stream)`, `since(stream, ts_us)`,
-  `between(stream, start_us, end_us)`, `search(stream, text)`,
-  `count_by_level(stream)`.
-- Metrics: `range_metric(name, begin, end)`,
-  `sample_metric(name, n, begin, end)`.
+- Messages: `tail(stream, n)`, `slice(stream, start, stop, step=1)`.
+- Metrics: `range(name, begin_us, end_us)`, `sample(name, n, begin_us=None, end_us=None)`.
 
-Rows come out as plain dicts. Log rows:
-`{"key": int, "ts_us": int, "level": str, "msg": str, "fields": dict}`.
+Log rows: `{"ts_us": int, "level": str, "msg": str, "fields": dict}`.
 Metric rows: `{"ts_us": int, "ts": float, "value": float}`.
 
 ## UI
 
-The viewer is a bracket too: `nulog.ui(port=)` boots a nudle server
-under `nulog.store(...)`. Stream + series pickers hydrate at eval time
-from the actual keys, refreshed every tick. Same shape as any Nu-nudle app.
+A live browser dashboard: filter logs by stream, level, and text, and
+chart any metric over the last minute, five minutes, hour, and up. New
+streams and series show up on their own, no restart.
+
+### Open any nulog file
+
+```bash
+nulog view logs.db
+```
+
+Then open <http://127.0.0.1:8080>. Safe on a file another process is
+writing.
+
+### Serve alongside your Nu app
+
+Add the viewer next to your writes - one process, one port:
 
 ```python
 import asyncio, nu, nulog
@@ -52,15 +98,7 @@ import asyncio, nu, nulog
 tree = nu.With(
     nulog.store("logs.db"),
     nulog.ui(port=8080),
-    body=nulog.info("app", "server started")
-         >> nu.ForeverDo(
-             nu.kv.Transaction(nulog.info("app", "tick")) >> nu.Delay(1.5)
-         ),
+    body=your_app_body,
 )
-
 asyncio.run(nu.arun(tree))
 ```
-
-Open <http://127.0.0.1:8080>: live newest-first entry table, stream switcher,
-level filter, message search, per-level count stats. The table + counts
-repaint every second off the same read atoms above.

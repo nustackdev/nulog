@@ -47,6 +47,9 @@ dependencies = [
     "rdbpython>=0.2.6",
 ]
 
+[project.scripts]
+nulog = "nulog.cli:main"
+
 [project.urls]
 Homepage = "https://github.com/nustackdev/nulog"
 Documentation = "https://github.com/nustackdev/nulog#readme"
